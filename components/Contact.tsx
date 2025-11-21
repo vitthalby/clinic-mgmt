@@ -1,30 +1,18 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import SectionHeader from './SectionHeader'
 
 export default function Contact() {
     return (
         <section className="py-12 relative overflow-hidden" id="contact">
             <div className="max-w-7xl mx-auto px-6 relative z-10">
-                <div className="mb-8 text-center max-w-2xl mx-auto">
-                    <motion.h2
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        className="text-3xl font-bold mb-3"
-                    >
-                        Get in <span className="text-gradient">Touch</span>
-                    </motion.h2>
-                    <motion.p
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ delay: 0.1 }}
-                        className="text-white/60 text-sm"
-                    >
-                        Have questions? Reach out to us directly or fill out the form below.
-                    </motion.p>
-                </div>
+                <SectionHeader
+                    title="Get in"
+                    highlight="Touch"
+                    description="Have questions? Reach out to us directly or fill out the form below."
+                    className="mb-8"
+                />
 
                 <div className="grid lg:grid-cols-2 gap-8 items-stretch">
                     {/* Contact Form */}

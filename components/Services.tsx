@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState } from 'react'
+import SectionHeader from './SectionHeader'
 
 const services = [
     {
@@ -93,25 +94,11 @@ export default function Services() {
     return (
         <section id="services" className="py-24 relative overflow-hidden">
             <div className="max-w-7xl mx-auto px-6">
-                <div className="mb-16">
-                    <motion.h2
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        className="text-3xl md:text-5xl font-bold mb-6"
-                    >
-                        Comprehensive <span className="text-gradient">Care Services</span>
-                    </motion.h2>
-                    <motion.p
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ delay: 0.1 }}
-                        className="text-white/60 max-w-2xl text-lg"
-                    >
-                        Specialized treatments tailored to your specific recovery goals.
-                    </motion.p>
-                </div>
+                <SectionHeader
+                    title="Comprehensive"
+                    highlight="Care Services"
+                    description="Specialized treatments tailored to your specific recovery goals."
+                />
 
                 <div className="relative group/carousel">
                     {/* Navigation Buttons - Absolute Positioned */}

@@ -4,6 +4,8 @@ import Navbar from '@/components/Navbar'
 import Hero from '@/components/Hero'
 import Services from '@/components/Services'
 import Contact from '@/components/Contact'
+import Reviews from '@/components/Reviews'
+import SectionHeader from '@/components/SectionHeader'
 import Footer from '@/components/Footer'
 
 export default function Home() {
@@ -22,11 +24,12 @@ export default function Home() {
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-lavender/5 rounded-full blur-[120px] pointer-events-none" />
 
         <div className="max-w-7xl mx-auto px-6 relative z-10">
-          <div className="flex items-end justify-between mb-12">
-            <div>
-              <h2 className="text-3xl md:text-5xl font-bold mb-4">Latest <span className="text-gradient">Insights</span></h2>
-              <p className="text-white/60 text-lg">Expert advice for your health journey</p>
-            </div>
+          <SectionHeader
+            title="Latest"
+            highlight="Insights"
+            description="Expert advice for your health journey"
+          />
+          <div className="flex justify-end -mt-8 mb-8">
             <button className="hidden md:flex items-center gap-2 text-orange hover:text-orange-light transition-colors font-medium">
               View all articles
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
@@ -79,29 +82,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-24 relative">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="relative rounded-[2.5rem] overflow-hidden bg-surface-highlight border border-white/10 p-12 md:p-24 text-center">
-            <div className="absolute inset-0 bg-gradient-to-b from-orange/10 to-transparent opacity-50" />
-
-            <div className="relative z-10">
-              <h2 className="text-4xl md:text-6xl font-bold mb-6">Ready to start your <br /><span className="text-gradient">recovery journey?</span></h2>
-              <p className="text-xl text-white/60 mb-10 max-w-2xl mx-auto">
-                Book your consultation today and take the first step towards a pain-free life.
-              </p>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <button className="btn-primary min-w-[160px]">
-                  Book Now
-                </button>
-                <button className="btn-secondary min-w-[160px]">
-                  Contact Us
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      <Reviews />
 
       <Footer />
     </main>
