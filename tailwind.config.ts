@@ -28,7 +28,9 @@ const config: Config = {
         secondary: '#00A3FF', // Alias for blue
       },
       fontFamily: {
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        sans: ['var(--font-outfit)', 'sans-serif'],
+        display: ['var(--font-playfair)', 'serif'],
+        body: ['var(--font-outfit)', 'sans-serif'],
       },
       fontSize: {
         '7xl': ['4.5rem', { lineHeight: '1', letterSpacing: '-0.02em' }],
