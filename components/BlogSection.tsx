@@ -43,7 +43,7 @@ export default async function BlogSection() {
                             actionButton={{
                                 label: 'Read More',
                                 href: `/blog/${post.id}`,
-                                variant: 'secondary'
+                                variant: 'primary'
                             }}
                         />
                     ))}

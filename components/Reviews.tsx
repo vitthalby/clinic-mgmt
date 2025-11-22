@@ -3,7 +3,8 @@
 import SectionHeader from './SectionHeader'
 import Card from './Card'
 import CardCarousel from './CardCarousel'
-import { reviewsData, GOOGLE_REVIEWS_URL } from '@/data/reviews.data'
+import { reviewsData } from '@/data/reviews.data'
+import { siteConfig } from '@/config/site'
 
 export default function Reviews() {
     return (
@@ -16,6 +17,18 @@ export default function Reviews() {
                     highlight="Success Stories"
                     description="Real experiences from our patients on their journey to recovery."
                 />
+
+                <div className="flex justify-end -mt-8 mb-8">
+                    <a
+                        href={siteConfig.links.googleReviews}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hidden md:flex items-center gap-2 text-orange hover:text-orange-light transition-colors font-medium"
+                    >
+                        Read all reviews
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                    </a>
+                </div>
 
                 <CardCarousel
                     cardsToShow={5}
@@ -39,21 +52,6 @@ export default function Reviews() {
                         />
                     ))}
                 />
-
-                {/* CTA Button */}
-                <div className="mt-12 text-center">
-                    <a
-                        href={GOOGLE_REVIEWS_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-orange to-orange/80 text-white rounded-full font-semibold hover:shadow-[0_0_30px_rgba(255,61,0,0.3)] transition-all duration-300 hover:scale-105"
-                    >
-                        <span>Read More Reviews on Google</span>
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                        </svg>
-                    </a>
-                </div>
             </div>
         </section>
     )

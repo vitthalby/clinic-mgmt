@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion'
 import { useState, useEffect } from 'react'
+import { siteConfig } from '@/config/site'
 
 export default function Navbar() {
     const [scrolled, setScrolled] = useState(false)
@@ -45,9 +46,14 @@ export default function Navbar() {
                                 </div>
                             </div>
 
-                            <span className="text-xl font-bold text-white tracking-tight">
-                                Fit<span className="text-orange">Square</span>
-                            </span>
+                            <div className="flex flex-col">
+                                <span className="text-xl font-bold text-white tracking-tight leading-none">
+                                    {siteConfig.name.substring(0, 3)}<span className="text-orange">{siteConfig.name.substring(3)}</span>
+                                </span>
+                                <span className="text-[10px] text-white/60 font-medium tracking-wide uppercase">
+                                    {siteConfig.category}
+                                </span>
+                            </div>
                         </div>
 
                         <div className="hidden md:flex items-center gap-8">

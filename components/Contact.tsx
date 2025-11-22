@@ -3,6 +3,8 @@
 import { motion } from 'framer-motion'
 import SectionHeader from './SectionHeader'
 
+import { siteConfig } from '@/config/site'
+
 export default function Contact() {
     return (
         <section className="py-12 relative overflow-hidden" id="contact">
@@ -66,7 +68,7 @@ export default function Contact() {
                         {/* Background Map */}
                         <div className="absolute inset-0 z-0">
                             <iframe
-                                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3022.1422937950147!2d-73.98731968482413!3d40.75889497932681!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x89c25855c6480299%3A0x55194ec5a1ae072e!2sTimes%20Square!5e0!3m2!1sen!2sus!4v1620000000000!5m2!1sen!2sus"
+                                src={siteConfig.contact.mapEmbedUrl}
                                 width="100%"
                                 height="100%"
                                 style={{ border: 0, filter: 'grayscale(100%) invert(90%)' }}
@@ -91,7 +93,7 @@ export default function Contact() {
                                     </div>
                                     <div>
                                         <h3 className="text-sm font-bold text-white">Visit Us</h3>
-                                        <p className="text-white/80 text-xs">123 Wellness Street, New York, NY</p>
+                                        <p className="text-white/80 text-xs">{siteConfig.contact.address}</p>
                                     </div>
                                 </a>
 
@@ -107,7 +109,7 @@ export default function Contact() {
                                     </div>
                                     <div>
                                         <h3 className="text-sm font-bold text-white">Contact</h3>
-                                        <p className="text-white/80 text-xs">hello@physiowell.com • +1 (555) 123-4567</p>
+                                        <p className="text-white/80 text-xs">{siteConfig.contact.email} • {siteConfig.contact.phone}</p>
                                     </div>
                                 </a>
                             </div>
