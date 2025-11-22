@@ -74,15 +74,27 @@ export default function Card({
 
                     {/* Action Button */}
                     {actionButton && (
-                        <button
-                            onClick={actionButton.onClick}
-                            className={`ml-2 px-3 py-1.5 rounded-full text-[10px] font-medium transition-all duration-200 shrink-0 ${actionButton.variant === 'primary'
-                                ? 'bg-orange text-white hover:bg-orange/80 hover:scale-105'
-                                : 'border border-white/10 text-white/80 hover:bg-white/5 hover:border-white/20'
-                                }`}
-                        >
-                            {actionButton.label}
-                        </button>
+                        actionButton.href ? (
+                            <a
+                                href={actionButton.href}
+                                className={`ml-2 px-3 py-1.5 rounded-full text-[10px] font-medium transition-all duration-200 shrink-0 inline-block text-center ${actionButton.variant === 'primary'
+                                    ? 'bg-orange text-white hover:bg-orange/80 hover:scale-105'
+                                    : 'border border-white/10 text-white/80 hover:bg-white/5 hover:border-white/20'
+                                    }`}
+                            >
+                                {actionButton.label}
+                            </a>
+                        ) : (
+                            <button
+                                onClick={actionButton.onClick}
+                                className={`ml-2 px-3 py-1.5 rounded-full text-[10px] font-medium transition-all duration-200 shrink-0 ${actionButton.variant === 'primary'
+                                    ? 'bg-orange text-white hover:bg-orange/80 hover:scale-105'
+                                    : 'border border-white/10 text-white/80 hover:bg-white/5 hover:border-white/20'
+                                    }`}
+                            >
+                                {actionButton.label}
+                            </button>
+                        )
                     )}
                 </div>
             </div>

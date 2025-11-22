@@ -16,10 +16,10 @@ export default function Services() {
                 />
 
                 <CardCarousel
-                    data={servicesData}
                     cardsToShow={5}
-                    renderCard={(service) => (
+                    items={servicesData.map((service) => (
                         <Card
+                            key={service.id}
                             id={service.id}
                             type="service"
                             title={service.title}
@@ -32,7 +32,7 @@ export default function Services() {
                                 variant: 'primary'
                             }}
                         />
-                    )}
+                    ))}
                 />
             </div>
         </section>

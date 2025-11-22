@@ -18,10 +18,10 @@ export default function Reviews() {
                 />
 
                 <CardCarousel
-                    data={reviewsData}
                     cardsToShow={5}
-                    renderCard={(review) => (
+                    items={reviewsData.map((review) => (
                         <Card
+                            key={review.id}
                             id={review.id}
                             type="review"
                             title={review.name}
@@ -37,7 +37,7 @@ export default function Reviews() {
                                 </div>
                             }
                         />
-                    )}
+                    ))}
                 />
 
                 {/* CTA Button */}

@@ -3,29 +3,27 @@
 import { motion } from 'framer-motion'
 import { useState, ReactNode } from 'react'
 
-interface CardCarouselProps<T> {
-    data: T[]
-    renderCard: (item: T) => ReactNode
+interface CardCarouselProps {
+    items: ReactNode[]
     cardsToShow?: number
 }
 
-export default function CardCarousel<T>({
-    data,
-    renderCard,
+export default function CardCarousel({
+    items,
     cardsToShow = 5,
-}: CardCarouselProps<T>) {
+}: CardCarouselProps) {
     const [currentIndex, setCurrentIndex] = useState(0)
 
     const nextSlide = () => {
         setCurrentIndex((prev) => {
-            const maxIndex = Math.max(0, data.length - cardsToShow)
+            const maxIndex = Math.max(0, items.length - cardsToShow)
             return prev >= maxIndex ? 0 : prev + 1
         })
     }
 
     const prevSlide = () => {
         setCurrentIndex((prev) => {
-            const maxIndex = Math.max(0, data.length - cardsToShow)
+            const maxIndex = Math.max(0, items.length - cardsToShow)
             return prev <= 0 ? maxIndex : prev - 1
         })
     }
@@ -62,7 +60,7 @@ export default function CardCarousel<T>({
                     animate={{ x: `-${currentIndex * (maxCardWidth + gap)}px` }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 >
-                    {data.map((item, index) => (
+                    {items.map((item, index) => (
                         <div
                             key={index}
                             className="flex-shrink-0"
@@ -70,7 +68,7 @@ export default function CardCarousel<T>({
                                 width: `min(${cardWidthPercent}%, ${maxCardWidth}px)`,
                             }}
                         >
-                            {renderCard(item)}
+                            {item}
                         </div>
                     ))}
                 </motion.div>

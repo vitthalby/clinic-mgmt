@@ -10,15 +10,15 @@ export interface CardProps {
     subtitle?: string
     actionButton?: {
         label: string
-        onClick: () => void
+        onClick?: () => void
+        href?: string
         variant: 'primary' | 'secondary'
     }
     className?: string
 }
 
-export interface CardCarouselProps<T> {
-    data: T[]
-    renderCard: (item: T) => ReactNode
+export interface CardCarouselProps {
+    items: ReactNode[]
     cardsToShow?: number
 }
 
@@ -50,4 +50,6 @@ export interface BlogData {
     author?: string
     image?: string
     link?: string
+    category: string
+    pinned?: boolean
 }
