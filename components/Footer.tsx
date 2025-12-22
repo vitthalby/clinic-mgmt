@@ -87,7 +87,7 @@ export default function Footer() {
 
                 <div className="border-t border-white/5 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
                     <p className="text-sm text-white/40">
-                        © 2024 {siteConfig.name}. All rights reserved.
+                        © 2025 {siteConfig.name}. All rights reserved.
                     </p>
                     <div className="flex gap-6 text-sm text-white/40">
                         <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
