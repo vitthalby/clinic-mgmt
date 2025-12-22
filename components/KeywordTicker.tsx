@@ -8,7 +8,7 @@ interface KeywordTickerProps {
 
 export default function KeywordTicker({ keywords }: KeywordTickerProps) {
     return (
-        <div className="w-full overflow-hidden py-4 mask-linear-fade">
+        <div className="w-full overflow-hidden py-1 mask-linear-fade">
             <motion.div
                 className="flex gap-8 whitespace-nowrap"
                 animate={{ x: [0, -1000] }}
@@ -21,9 +21,10 @@ export default function KeywordTicker({ keywords }: KeywordTickerProps) {
                 {[...keywords, ...keywords, ...keywords].map((keyword, i) => (
                     <span
                         key={i}
-                        className="text-lg font-medium text-white/30 hover:text-orange transition-colors cursor-default"
+                        className="text-xl font-light tracking-wide text-white/40 hover:text-white transition-colors cursor-default flex items-center gap-8"
                     >
-                        {keyword} •
+                        {keyword}
+                        <span className="text-orange/50 text-sm">✦</span>
                     </span>
                 ))}
             </motion.div>

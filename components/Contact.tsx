@@ -63,7 +63,7 @@ export default function Contact() {
                         initial={{ opacity: 0, x: 20 }}
                         whileInView={{ opacity: 1, x: 0 }}
                         viewport={{ once: true }}
-                        className="relative rounded-2xl overflow-hidden border border-white/10 min-h-[300px] group"
+                        className="relative rounded-2xl overflow-hidden border border-white/10 min-h-[400px] lg:min-h-[300px] group"
                     >
                         {/* Background Map */}
                         <div className="absolute inset-0 z-0">
@@ -83,7 +83,7 @@ export default function Contact() {
                             <div className="grid gap-3 pointer-events-auto">
                                 <a
                                     href="/contact"
-                                    className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4 flex items-center gap-4 hover:bg-white/15 transition-colors group/card relative overflow-hidden pr-12"
+                                    className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-3 sm:p-4 flex items-center gap-3 sm:gap-4 hover:bg-white/15 transition-colors group/card relative overflow-hidden pr-10 sm:pr-12"
                                 >
                                     <div className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white group-hover/card:bg-orange group-hover/card:text-white transition-all duration-300">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
@@ -99,7 +99,7 @@ export default function Contact() {
 
                                 <a
                                     href="/contact"
-                                    className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4 flex items-center gap-4 hover:bg-white/15 transition-colors group/card relative overflow-hidden pr-12"
+                                    className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-3 sm:p-4 flex items-center gap-3 sm:gap-4 hover:bg-white/15 transition-colors group/card relative overflow-hidden pr-10 sm:pr-12"
                                 >
                                     <div className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white group-hover/card:bg-blue group-hover/card:text-white transition-all duration-300">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>

@@ -17,13 +17,13 @@ export const landingPageData = {
             { value: "4.9/5", label: "Google Rating" }
         ],
         keywords: [
-            "Sciatica Relief",
+            "Physiotherapy in Wakad",
             "Sports Injury",
             "Post-Op Rehab",
             "Frozen Shoulder",
             "Back Pain",
             "Neck Pain",
-            "Arthritis Care",
+            "Best Physiotherapy near you",
             "Manual Therapy",
             "Dry Needling",
             "Knee Pain"

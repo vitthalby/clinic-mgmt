@@ -1,6 +1,7 @@
 'use client'
 
 import { siteConfig } from '@/config/site'
+import Image from 'next/image'
 
 export default function Footer() {
     return (
@@ -9,8 +10,13 @@ export default function Footer() {
                 <div className="grid md:grid-cols-4 gap-12 mb-16">
                     <div className="col-span-2">
                         <div className="flex items-center gap-2 mb-6">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange to-lavender flex items-center justify-center">
-                                <span className="text-white font-bold text-lg">{siteConfig.name[0]}</span>
+                            <div className="relative w-10 h-10">
+                                <Image
+                                    src="/images/logo.jpg"
+                                    alt="Logo"
+                                    fill
+                                    className="object-contain"
+                                />
                             </div>
                             <div className="flex flex-col">
                                 <span className="text-xl font-bold text-white tracking-tight leading-none">

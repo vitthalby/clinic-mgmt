@@ -3,6 +3,8 @@
 import { motion } from 'framer-motion'
 import { useState, useEffect } from 'react'
 import { siteConfig } from '@/config/site'
+import Image from 'next/image'
+
 
 export default function Navbar() {
     const [scrolled, setScrolled] = useState(false)
@@ -37,14 +39,19 @@ export default function Navbar() {
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                             {/* Logo Icon */}
-                            <div className="relative w-10 h-10">
-                                <div className="absolute inset-0 bg-gradient-to-br from-orange to-blue rounded-xl blur-sm opacity-50" />
-                                <div className="relative w-full h-full bg-gradient-to-br from-orange to-blue rounded-xl flex items-center justify-center overflow-hidden">
-                                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24">
-                                        <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                    </svg>
-                                </div>
-                            </div>
+                            {/* Logo Image */}
+                            <motion.div
+                                className="relative w-10 h-10"
+                                animate={{ rotate: 0, rotateY: [0, 45, 0, -45, 0] }}
+                                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                            >
+                                <Image
+                                    src="/images/logo.jpg"
+                                    alt="Logo"
+                                    fill
+                                    className="object-contain"
+                                />
+                            </motion.div>
 
                             <div className="flex flex-col">
                                 <span className="text-xl font-bold text-white tracking-tight leading-none">

@@ -13,9 +13,19 @@ const playfair = Playfair_Display({
   display: 'swap',
 })
 
+import { siteConfig } from '@/config/site'
+
 export const metadata = {
-  title: 'PhysioWell - Expert Physiotherapy Care',
-  description: 'Professional physiotherapy services',
+  title: {
+    default: `${siteConfig.name} - ${siteConfig.tagline}`,
+    template: `%s | ${siteConfig.name}`,
+  },
+  description: siteConfig.description,
+  icons: {
+    icon: '/images/logo.jpg',
+    shortcut: '/images/logo.jpg',
+    apple: '/images/logo.jpg',
+  },
 }
 
 export default function RootLayout({

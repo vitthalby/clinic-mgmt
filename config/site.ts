@@ -1,5 +1,6 @@
 export const siteConfig = {
     name: "FitSquare",
+    tagline: "Expert Physiotherapy Care",
     category: "Physiotherapy Center",
     description: "Empowering you to move freely and live pain-free.",
     contact: {

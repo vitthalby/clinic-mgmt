@@ -19,83 +19,78 @@ export default function Card({
 
     return (
         <motion.div
-            whileHover={{ scale: 1.05, y: -8 }}
             transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            className={`glass-card p-4 rounded-2xl group relative overflow-hidden hover:shadow-[0_20px_60px_rgba(255,61,0,0.15)] transition-shadow duration-500 aspect-square flex flex-col ${className}`}
+            className={`glass-card p-0 md:p-4 rounded-2xl group relative overflow-hidden hover:shadow-[0_20px_60px_rgba(255,61,0,0.15)] transition-shadow duration-500 h-full flex flex-col ${className}`}
         >
             {/* Animated gradient overlay */}
             <div className="absolute inset-0 bg-gradient-to-br from-orange/0 via-orange/0 to-orange/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-            {/* Header: Image Left, TopRight Content Right */}
-            <div className="relative flex items-start justify-between mb-3">
-                {/* Circular Image/Avatar */}
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange/20 to-blue/20 flex items-center justify-center text-orange font-bold text-sm shrink-0 overflow-hidden">
-                    {type === 'review' ? (
-                        // For reviews, show initials if no image
-                        <span>{title.split(' ').map(n => n[0]).join('')}</span>
-                    ) : type === 'service' && topRight ? (
-                        // For services, if topRight has the icon, show it here in the left circle
-                        <div className="w-full h-full flex items-center justify-center scale-75 text-white/80 group-hover:text-orange transition-colors duration-300">
-                            {topRight}
-                        </div>
-                    ) : image ? (
-                        // For other types with images, show the image
-                        <img src={imagePath} alt={title} className="w-full h-full object-cover" />
-                    ) : (
-                        // Fallback: show first letter
-                        <span>{title[0]}</span>
-                    )}
-                </div>
-
-                {/* Top Right Slot - Only show if not a service (since services use it for icon on left) */}
-                {topRight && type !== 'service' && (
-                    <div className="flex-shrink-0">
-                        {topRight}
-                    </div>
-                )}
-            </div>
-
-            {/* Summary Text - Grows to fill space */}
-            <div className="flex-grow relative mb-3">
-                <p className="text-white/70 text-xs leading-relaxed line-clamp-4 group-hover:text-white/80 transition-colors duration-300">
-                    "{summary}"
-                </p>
-            </div>
-
-            {/* Footer: Title/Subtitle Left, Action Button Right */}
-            <div className="relative pt-3 border-t border-white/5 group-hover:border-white/10 transition-colors duration-300 mt-auto">
-                <div className="flex items-end justify-between">
-                    <div className="flex-1">
-                        <h4 className="text-white font-semibold text-xs">{title}</h4>
-                        {subtitle && (
-                            <p className="text-white/50 text-[10px]">{subtitle}</p>
+            {/* Mobile First Content Structure */}
+            <div className="flex flex-col h-full">
+                {/* Header / Image Area */}
+                <div className="relative p-4 pb-0 md:p-0 md:mb-3 flex items-start justify-between shrink-0">
+                    {/* Circular Image/Avatar */}
+                    <div className="w-10 h-10 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-orange/20 to-blue/20 flex items-center justify-center text-orange font-bold text-sm shrink-0 overflow-hidden">
+                        {type === 'review' ? (
+                            <span>{title.split(' ').map(n => n[0]).join('')}</span>
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                                {/* Icon placeholder or actual icon */}
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                            </div>
                         )}
                     </div>
 
-                    {/* Action Button */}
-                    {actionButton && (
-                        actionButton.href ? (
-                            <a
-                                href={actionButton.href}
-                                className={`ml-2 px-3 py-1.5 rounded-full text-[10px] font-medium transition-all duration-200 shrink-0 inline-block text-center ${actionButton.variant === 'primary'
-                                    ? 'bg-orange text-white hover:bg-orange/80 hover:scale-105'
-                                    : 'border border-white/10 text-white/80 hover:bg-white/5 hover:border-white/20'
-                                    }`}
-                            >
-                                {actionButton.label}
-                            </a>
-                        ) : (
-                            <button
-                                onClick={actionButton.onClick}
-                                className={`ml-2 px-3 py-1.5 rounded-full text-[10px] font-medium transition-all duration-200 shrink-0 ${actionButton.variant === 'primary'
-                                    ? 'bg-orange text-white hover:bg-orange/80 hover:scale-105'
-                                    : 'border border-white/10 text-white/80 hover:bg-white/5 hover:border-white/20'
-                                    }`}
-                            >
-                                {actionButton.label}
-                            </button>
-                        )
+                    {/* Top Right Slot */}
+                    {topRight && type !== 'service' && (
+                        <div className="flex-shrink-0">
+                            {topRight}
+                        </div>
                     )}
+                </div>
+
+                {/* Content Area */}
+                <div className="p-4 md:p-0 flex flex-col flex-grow">
+                    <div className="mb-2">
+                        <h4 className="text-white font-semibold text-sm md:text-xs line-clamp-1">{title}</h4>
+                        {subtitle && (
+                            <p className="text-white/50 text-[10px] line-clamp-1">{subtitle}</p>
+                        )}
+                    </div>
+
+                    {/* Summary */}
+                    <div className="flex-grow relative mb-3">
+                        <p className="text-white/70 text-xs leading-relaxed line-clamp-3 md:line-clamp-4 group-hover:text-white/80 transition-colors duration-300">
+                            "{summary}"
+                        </p>
+                    </div>
+
+                    {/* Footer / Action */}
+                    <div className="mt-auto pt-3 border-t border-white/5 group-hover:border-white/10 transition-colors duration-300">
+                        {actionButton && (
+                            actionButton.href ? (
+                                <a
+                                    href={actionButton.href}
+                                    className={`w-full md:w-auto px-3 py-1.5 md:py-1.5 rounded-lg md:rounded-full text-[10px] font-medium transition-all duration-200 inline-block text-center ${actionButton.variant === 'primary'
+                                        ? 'bg-orange text-white hover:bg-orange/80'
+                                        : 'border border-white/10 text-white/80 hover:bg-white/5'
+                                        }`}
+                                >
+                                    {actionButton.label}
+                                </a>
+                            ) : (
+                                <button
+                                    onClick={actionButton.onClick}
+                                    className={`w-full md:w-auto px-3 py-1.5 md:py-1.5 rounded-lg md:rounded-full text-[10px] font-medium transition-all duration-200 ${actionButton.variant === 'primary'
+                                        ? 'bg-orange text-white hover:bg-orange/80'
+                                        : 'border border-white/10 text-white/80 hover:bg-white/5'
+                                        }`}
+                                >
+                                    {actionButton.label}
+                                </button>
+                            )
+                        )}
+                    </div>
                 </div>
             </div>
         </motion.div>

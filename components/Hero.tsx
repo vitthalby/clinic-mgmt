@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { landingPageData } from '@/data/landing-page'
 import KeywordTicker from './KeywordTicker'
 
@@ -29,136 +30,154 @@ export default function Hero() {
     }, [hero.services.length])
 
     return (
-        <section className="relative min-h-screen flex items-center pt-10 overflow-hidden">
-            {/* Background Elements */}
-            <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-orange/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" />
-                <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-blue/10 rounded-full blur-[120px] mix-blend-screen" />
+        <section className="relative min-h-[svh] lg:min-h-screen flex flex-col lg:flex-row items-center pt-0 lg:pt-10 overflow-hidden">
+            {/* Mobile Background Image (Absolute) */}
+            <div className="absolute left-0 right-0 bottom-0 top-24 z-0 lg:hidden">
+                <Image
+                    src={hero.services[activeService].image}
+                    alt={hero.services[activeService].imageAlt}
+                    fill
+                    className="object-cover"
+                    priority
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/30" />
             </div>
 
-            <div className="max-w-7xl mx-auto px-6 w-full relative z-10">
-                <div className="grid lg:grid-cols-2 gap-12 items-center">
-                    {/* Left Content */}
-                    <div className="max-w-2xl">
+            {/* Background Elements (Desktop Only) */}
+            <div className="absolute inset-0 pointer-events-none hidden lg:block">
+                <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-orange/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" />
+                <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-blue/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" />
+            </div>
+
+            <div className="container mx-auto px-4 relative z-10 flex flex-col lg:flex-row items-center h-full justify-end lg:justify-center pb-12 lg:pb-0 pt-24 lg:pt-0">
+                {/* Left Content */}
+                <div className="w-full lg:w-1/2 mb-8 lg:mb-0 text-center lg:text-left">
+                    <div className="relative">
                         <motion.h1
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: 0.1 }}
-                            className="text-5xl md:text-7xl font-bold leading-[1.1] mb-6 tracking-tight"
+                            className="text-4xl md:text-7xl font-bold leading-[1.1] mb-4 md:mb-6 tracking-tight"
                         >
                             {hero.headline.prefix} <br />
                             <span className="text-gradient">{hero.headline.highlight}</span>
-                            {hero.headline.suffix}
                         </motion.h1>
 
                         <motion.p
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: 0.2 }}
-                            className="text-lg text-white/60 mb-8 leading-relaxed max-w-lg"
+                            className="text-base md:text-lg text-white/80 md:text-white/60 mb-6 md:mb-8 leading-relaxed max-w-lg mx-auto lg:mx-0"
                         >
                             {hero.subheadline}
                         </motion.p>
 
                         <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ duration: 0.5, delay: 0.25 }}
+                            className="mb-8 w-full relative"
+                        >
+                            {/* Innovative 'Stream' Look */}
+                            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+                            <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+                            <div className="py-3">
+                                <KeywordTicker keywords={hero.keywords} />
+                            </div>
+                        </motion.div>
+
+                        <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: 0.3 }}
-                            className="flex flex-wrap gap-4"
+                            className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 justify-center lg:justify-start"
                         >
-                            <button className="btn-primary">
+                            <Link
+                                href="/book"
+                                className="w-full sm:w-auto px-8 py-3 bg-orange text-white rounded-full font-semibold hover:bg-orange/90 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-orange/25"
+                            >
                                 {hero.cta.primary}
-                            </button>
-                            <button className="btn-secondary">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                </svg>
+                            </Link>
+                            <Link
+                                href="/services"
+                                className="w-full sm:w-auto px-8 py-3 bg-white/5 backdrop-blur-md border border-white/10 text-white rounded-full font-semibold hover:bg-white/10 transition-all hover:scale-105 active:scale-95 flex items-center justify-center"
+                            >
                                 {hero.cta.secondary}
-                            </button>
+                            </Link>
                         </motion.div>
 
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.6 }}
-                            className="mt-8 w-full max-w-xl"
-                        >
-                            <KeywordTicker keywords={hero.keywords} />
-                        </motion.div>
+                        {/* Stats - Compact Overlay for Mobile */}
 
+                    </div>
+                </div>
+
+                {/* Right Content - 3D Rotating Card (Desktop Only) */}
+                <div className="hidden lg:block w-1/2 relative h-[600px] perspective-1000">
+                    <AnimatePresence mode="wait">
                         <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.8 }}
-                            className="mt-6"
+                            key={activeService}
+                            initial={{ opacity: 0, rotateY: -90, x: 100 }}
+                            animate={{ opacity: 1, rotateY: 0, x: 0 }}
+                            exit={{ opacity: 0, rotateY: 90, x: -100 }}
+                            transition={{ duration: 0.5, type: "spring", stiffness: 100 }}
+                            className="relative w-full h-full preserve-3d"
                         >
-                            <div className="inline-flex items-center gap-4 px-5 py-2.5 bg-white/5 backdrop-blur-md rounded-full border border-white/10">
-                                {hero.stats.map((stat, i) => (
-                                    <div key={i} className="flex items-center gap-2.5 px-2 first:pl-0 last:pr-0 border-r border-white/10 last:border-0">
-                                        <span className="text-2xl font-bold text-white leading-none">
-                                            {stat.value}
-                                        </span>
-                                        <span className="text-[10px] font-medium text-white/50 uppercase tracking-wider leading-tight max-w-[60px]">
-                                            {stat.label}
-                                        </span>
-                                    </div>
-                                ))}
+                            {/* Main Image Card */}
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[500px] rounded-3xl overflow-hidden shadow-2xl border border-white/10 group">
+                                <Image
+                                    src={hero.services[activeService].image}
+                                    alt={hero.services[activeService].imageAlt}
+                                    fill
+                                    className="object-cover transition-transform duration-700 group-hover:scale-110"
+                                    priority
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+
+                                <div className="absolute bottom-0 left-0 right-0 p-8 transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
+                                    <h3 className="text-2xl font-bold text-white mb-2">
+                                        {hero.services[activeService].title}
+                                    </h3>
+                                    <p className="text-white/70 line-clamp-2">
+                                        {hero.services[activeService].description}
+                                    </p>
+                                </div>
                             </div>
+
+                            {/* Floating Elements */}
+                            {/* Floating Stats Card */}
+                            <motion.div
+                                animate={{ y: [0, -15, 0] }}
+                                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                                className="absolute top-20 -right-4 bg-surface-highlight/80 backdrop-blur-xl border border-white/20 p-5 rounded-2xl shadow-2xl max-w-[200px]"
+                            >
+                                <div className="flex flex-col gap-4">
+                                    {hero.stats.map((stat, i) => (
+                                        <div key={i} className="flex items-center gap-3 border-b border-white/10 last:border-0 pb-3 last:pb-0">
+                                            <div className="w-10 h-10 rounded-full bg-orange/20 flex items-center justify-center text-orange shrink-0">
+                                                {i === 0 && (
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                                                )}
+                                                {i === 1 && (
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                )}
+                                                {i === 2 && (
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <p className="text-lg font-bold text-white leading-none">{stat.value}</p>
+                                                <p className="text-xs text-white/60 mt-0.5">{stat.label}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </motion.div>
                         </motion.div>
-                    </div>
-
-                    {/* Right Content - 3D Rotating Card */}
-                    <div className="relative hidden lg:flex items-center justify-center h-[600px]">
-                        <div className="relative w-[400px] h-[500px] perspective-1000">
-                            <AnimatePresence mode="wait">
-                                <motion.div
-                                    key={activeService}
-                                    initial={{ rotateY: -90, opacity: 0 }}
-                                    animate={{ rotateY: 0, opacity: 1 }}
-                                    exit={{ rotateY: 90, opacity: 0 }}
-                                    transition={{ duration: 0.6, ease: "backOut" }}
-                                    className="absolute inset-0 rounded-3xl overflow-hidden border border-white/10 group"
-                                    style={{
-                                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
-                                    }}
-                                >
-                                    {/* Background Image */}
-                                    <div className="absolute inset-0 transition-transform duration-700 group-hover:scale-110">
-                                        <Image
-                                            src={hero.services[activeService].image}
-                                            alt={hero.services[activeService].imageAlt}
-                                            fill
-                                            className="object-cover"
-                                            priority
-                                        />
-                                    </div>
-
-                                    {/* Gradient Overlay */}
-                                    <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/50 to-transparent opacity-90" />
-
-                                    {/* Content */}
-                                    <div className="relative h-full flex flex-col justify-between p-8 z-10">
-                                        <div className="flex justify-between items-start">
-                                            <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center text-white">
-                                                {SERVICE_ICONS[hero.services[activeService].title]}
-                                            </div>
-                                            <span className="text-4xl font-bold text-white/10">0{activeService + 1}</span>
-                                        </div>
-
-                                        <div>
-                                            <h3 className="text-3xl font-bold text-white mb-3">{hero.services[activeService].title}</h3>
-                                            <p className="text-white/70 leading-relaxed">{hero.services[activeService].description}</p>
-
-                                            <div className="mt-6 flex items-center gap-2 text-orange text-sm font-medium">
-                                                <span>Learn More</span>
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            </AnimatePresence>
-
-                            {/* Reflection/Shadow */}
-                            <div className="absolute -bottom-12 left-12 right-12 h-4 bg-black/50 blur-xl rounded-full" />
-                        </div>
-                    </div>
+                    </AnimatePresence>
                 </div>
             </div>
         </section>
