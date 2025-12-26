@@ -29,11 +29,17 @@ jobs:
       - name: Prepare Deployment Artifacts
         run: |
           mkdir -p deploy_package
-          cp -r .next/standalone/* deploy_package/
-          mkdir -p deploy_package/.next/static
-          cp -r .next/static/* deploy_package/.next/static/
+          # Copy EVERYTHING from standalone, including hidden .next folder (required for server manifests)
+          # We use '.' at the end of the source path to ensure hidden files are included
+          cp -rp .next/standalone/. deploy_package/
+          
+          # Standalone mode requires public and .next/static to be manually copied 
+          # to their respective locations to serve static assets correctly.
           mkdir -p deploy_package/public
-          cp -r public/* deploy_package/public/
+          cp -rp public/. deploy_package/public/
+          
+          mkdir -p deploy_package/.next/static
+          cp -rp .next/static/. deploy_package/.next/static/
 
       - name: Copy Files to VPS
         uses: easingthemes/ssh-deploy@v5.1.0
