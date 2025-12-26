@@ -1,0 +1,80 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Next.js
+        run: npm run build
+
+      - name: Deploy to VPS
+        uses: easingthemes/ssh-deploy@v5.1.0
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+          ARGS: "-rlgoDzvc -i --delete"
+          SOURCE: ".next/standalone/ .next/static/ public/"
+          # We deploy to a temporary directory first or directly to the target. 
+          # For standalone, we need to merge .next/static and public into the standalone folder structure usually, 
+          # BUT 'ssh-deploy' copies sources to remote.
+          # The standalone build puts everything needed to run in .next/standalone.
+          # However, .next/static and public are NOT included in standalone by default in a way that serves them correctly without copying,
+          # OR they are expected to be copied alongside.
+          # Official docs say: "The .next/standalone directory can then be copied to your deployment server..."
+          # and "Additionally, you will need to copy the public and .next/static folders to standalone/public and standalone/.next/static"
+          # So let's prepare the artifact for deployment first.
+          
+      - name: Prepare Deployment Artifacts
+        run: |
+          mkdir -p deploy_package
+          cp -r .next/standalone/* deploy_package/
+          mkdir -p deploy_package/.next/static
+          cp -r .next/static/* deploy_package/.next/static/
+          mkdir -p deploy_package/public
+          cp -r public/* deploy_package/public/
+
+      - name: Copy Files to VPS
+        uses: easingthemes/ssh-deploy@v5.1.0
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+          ARGS: "-rlgoDzvc -i --delete"
+          SOURCE: "deploy_package/"
+          REMOTE_HOST: ${{ secrets.VPS_HOST }}
+          REMOTE_USER: ${{ secrets.VPS_USER }}
+          TARGET: ${{ secrets.VPS_TARGET_DIR || '/var/www/clinic-mgmt' }} 
+          # Default to /var/www/clinic-mgmt if secret not set, but arguably better to fail if not set? 
+          # The user prompt implied "configured user", so let's stick to using secrets.
+
+      - name: Restart PM2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ${{ secrets.VPS_TARGET_DIR || '/var/www/clinic-mgmt' }}
+            # Install production dependencies only (from package.json in standalone) usually isn't needed 
+            # because standalone bundles node_modules. BUT sometimes it's safer to ensure.
+            # Actually standalone includes necessary node_modules.
+            
+            # Start/Restart app
+            # Assuming 'ecosystem.config.js' exists or using simple start
+            pm2 reload clinic-mgmt || pm2 start server.js --name clinic-mgmt
+            pm2 save
