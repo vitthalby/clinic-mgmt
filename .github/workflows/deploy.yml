@@ -25,22 +25,7 @@ jobs:
       - name: Build Next.js
         run: npm run build
 
-      - name: Deploy to VPS
-        uses: easingthemes/ssh-deploy@v5.1.0
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
-          ARGS: "-rlgoDzvc -i --delete"
-          SOURCE: ".next/standalone/ .next/static/ public/"
-          # We deploy to a temporary directory first or directly to the target. 
-          # For standalone, we need to merge .next/static and public into the standalone folder structure usually, 
-          # BUT 'ssh-deploy' copies sources to remote.
-          # The standalone build puts everything needed to run in .next/standalone.
-          # However, .next/static and public are NOT included in standalone by default in a way that serves them correctly without copying,
-          # OR they are expected to be copied alongside.
-          # Official docs say: "The .next/standalone directory can then be copied to your deployment server..."
-          # and "Additionally, you will need to copy the public and .next/static folders to standalone/public and standalone/.next/static"
-          # So let's prepare the artifact for deployment first.
-          
+
       - name: Prepare Deployment Artifacts
         run: |
           mkdir -p deploy_package
