@@ -14,6 +14,7 @@ const playfair = Playfair_Display({
 })
 
 import { siteConfig } from '@/config/site'
+import FloatingContact from '@/components/FloatingContact'
 
 export const metadata = {
   title: {
@@ -28,6 +29,13 @@ export const metadata = {
   },
 }
 
+export const viewport = {
+  themeColor: 'black',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+}
+
 export default function RootLayout({
   children,
 }: {
@@ -35,7 +43,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${outfit.variable} ${playfair.variable}`}>
-      <body className={outfit.className}>{children}</body>
+      <body className={outfit.className}>
+        {children}
+        <FloatingContact />
+      </body>
     </html>
   )
 }

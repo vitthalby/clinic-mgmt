@@ -47,10 +47,9 @@ export default function CardCarousel({
     return (
         <div className="relative group/carousel">
             {/* Navigation Buttons - Absolute Positioned */}
-            {/* Hide on mobile, show on larger screens */}
             <button
                 onClick={prevSlide}
-                className="hidden md:flex absolute -left-4 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-surface-card/80 backdrop-blur-md border border-white/10 items-center justify-center text-white hover:bg-white hover:text-black transition-all duration-300 shadow-lg opacity-0 group-hover/carousel:opacity-100 -translate-x-4 group-hover/carousel:translate-x-0"
+                className="flex absolute -left-2 md:-left-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 md:w-12 md:h-12 rounded-full bg-surface-card/80 backdrop-blur-md border border-white/10 items-center justify-center text-white hover:bg-white hover:text-black transition-all duration-300 shadow-lg opacity-100 md:opacity-0 md:group-hover/carousel:opacity-100 translate-x-0 md:-translate-x-4 md:group-hover/carousel:translate-x-0"
             >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -58,7 +57,7 @@ export default function CardCarousel({
             </button>
             <button
                 onClick={nextSlide}
-                className="hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-surface-card/80 backdrop-blur-md border border-white/10 items-center justify-center text-white hover:bg-white hover:text-black transition-all duration-300 shadow-lg opacity-0 group-hover/carousel:opacity-100 translate-x-4 group-hover/carousel:translate-x-0"
+                className="flex absolute -right-2 md:-right-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 md:w-12 md:h-12 rounded-full bg-surface-card/80 backdrop-blur-md border border-white/10 items-center justify-center text-white hover:bg-white hover:text-black transition-all duration-300 shadow-lg opacity-100 md:opacity-0 md:group-hover/carousel:opacity-100 translate-x-0 md:translate-x-4 md:group-hover/carousel:translate-x-0"
             >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -97,20 +96,6 @@ export default function CardCarousel({
                         </div>
                     ))}
                 </motion.div>
-            </div>
-
-            {/* Mobile Navigation Dots */}
-            <div className="flex md:hidden justify-center gap-2 mt-4">
-                {Array.from({ length: Math.ceil(items.length / cardsToShow) }).map((_, idx) => (
-                    <button
-                        key={idx}
-                        onClick={() => setCurrentIndex(idx * cardsToShow)}
-                        className={`w-2 h-2 rounded-full transition-colors ${Math.floor(currentIndex / cardsToShow) === idx
-                            ? 'bg-orange'
-                            : 'bg-white/20'
-                            }`}
-                    />
-                ))}
             </div>
         </div>
     )

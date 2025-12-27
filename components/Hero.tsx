@@ -18,6 +18,38 @@ const SERVICE_ICONS: Record<string, React.ReactNode> = {
     'Geriatric Physio': <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
 }
 
+// Helper Component for Stats
+function StatsCard({ className, variant = "vertical", stats }: { className?: string, variant?: "vertical" | "horizontal", stats: typeof landingPageData.hero.stats }) {
+    if (variant === 'vertical') {
+        return (
+            <div className={`bg-surface-highlight/70 backdrop-blur-md border border-white/10 rounded-xl shadow-xl ${className}`}>
+                <div className="flex flex-col gap-2 p-3">
+                    {stats.map((stat, i) => (
+                        <div key={i} className="flex items-center gap-3 border-b border-white/5 last:border-0 pb-2 last:pb-0">
+                            <div className="w-8 h-8 rounded-full bg-orange/10 flex items-center justify-center text-orange shrink-0">
+                                {i === 0 && (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                                )}
+                                {i === 1 && (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                )}
+                                {i === 2 && (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
+                                )}
+                            </div>
+                            <div>
+                                <p className="text-base font-bold text-white leading-none">{stat.value}</p>
+                                <p className="text-[10px] text-white/50 mt-0.5 whitespace-nowrap">{stat.label}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )
+    }
+    return null
+}
+
 export default function Hero() {
     const [activeService, setActiveService] = useState(0)
     const { hero } = landingPageData
@@ -30,9 +62,9 @@ export default function Hero() {
     }, [hero.services.length])
 
     return (
-        <section className="relative min-h-[svh] lg:min-h-screen flex flex-col lg:flex-row items-center pt-0 lg:pt-10 overflow-hidden">
+        <section className="relative min-h-[105svh] lg:min-h-screen flex flex-col lg:flex-row lg:items-center pt-0 lg:pt-10 overflow-hidden">
             {/* Mobile Background Image (Absolute) */}
-            <div className="absolute left-0 right-0 bottom-0 top-24 z-0 lg:hidden">
+            <div className="absolute left-0 right-0 bottom-0 top-0 z-0 lg:hidden">
                 <Image
                     src={hero.services[activeService].image}
                     alt={hero.services[activeService].imageAlt}
@@ -40,7 +72,7 @@ export default function Hero() {
                     className="object-cover"
                     priority
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/30" />
+                <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-transparent to-black" />
             </div>
 
             {/* Background Elements (Desktop Only) */}
@@ -49,10 +81,40 @@ export default function Hero() {
                 <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-blue/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" />
             </div>
 
-            <div className="container mx-auto px-4 relative z-10 flex flex-col lg:flex-row items-center h-full justify-end lg:justify-center pb-12 lg:pb-0 pt-24 lg:pt-0">
+            {/* Mobile Stats - Absolute Left Vertical Stack */}
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 z-20 lg:hidden flex flex-col gap-3">
+                {hero.stats.map((stat, i) => (
+                    <motion.div
+                        key={i}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.5, delay: 0.5 + (i * 0.1) }}
+                        className="bg-surface-highlight/40 backdrop-blur-md border border-white/10 rounded-full px-3 py-2 flex items-center gap-3 w-max"
+                    >
+                        <div className="text-orange">
+                            {i === 0 && (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                            )}
+                            {i === 1 && (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            )}
+                            {i === 2 && (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
+                            )}
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-sm font-bold text-white leading-none">{stat.value}</span>
+                            <span className="text-[9px] text-white/60 leading-none">{stat.label}</span>
+                        </div>
+                    </motion.div>
+                ))}
+            </div>
+
+            <div className="container mx-auto px-4 relative z-10 flex flex-col lg:flex-row items-stretch lg:items-center h-full lg:h-auto flex-grow lg:flex-grow-0 justify-between lg:justify-center pb-12 lg:pb-0 pt-28 lg:pt-0">
                 {/* Left Content */}
-                <div className="w-full lg:w-1/2 mb-8 lg:mb-0 text-center lg:text-left">
-                    <div className="relative">
+                <div className="w-full lg:w-1/2 mb-0 lg:mb-0 text-center lg:text-left flex flex-col lg:block flex-grow lg:flex-grow-0 justify-between lg:justify-start">
+                    {/* Top Text Group */}
+                    <div className="relative mt-0 lg:mt-0">
                         <motion.h1
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -71,12 +133,36 @@ export default function Hero() {
                         >
                             {hero.subheadline}
                         </motion.p>
+                    </div>
+
+                    {/* Bottom Action Group */}
+                    <div className="relative">
+                        {/* Active Service Info (Mobile Only - Bottom above ticker) */}
+                        <div className="lg:hidden flex flex-col justify-center items-center px-4 mb-6">
+                            <AnimatePresence mode="wait">
+                                <motion.div
+                                    key={activeService}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -10 }}
+                                    transition={{ duration: 0.3 }}
+                                    className="text-center"
+                                >
+                                    <h3 className="text-2xl font-bold text-white mb-2 drop-shadow-lg">
+                                        {hero.services[activeService].title}
+                                    </h3>
+                                    <p className="text-white/90 text-sm max-w-[280px] mx-auto drop-shadow-md line-clamp-3 bg-black/20 backdrop-blur-sm rounded-lg p-2 border border-white/10">
+                                        {hero.services[activeService].description}
+                                    </p>
+                                </motion.div>
+                            </AnimatePresence>
+                        </div>
 
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             transition={{ duration: 0.5, delay: 0.25 }}
-                            className="mb-8 w-full relative"
+                            className="mb-6 lg:mb-8 w-full relative"
                         >
                             {/* Innovative 'Stream' Look */}
                             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
@@ -152,29 +238,13 @@ export default function Hero() {
                             <motion.div
                                 animate={{ y: [0, -15, 0] }}
                                 transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                                className="absolute top-20 -right-4 bg-surface-highlight/80 backdrop-blur-xl border border-white/20 p-5 rounded-2xl shadow-2xl max-w-[200px]"
+                                className="absolute top-24 -right-2 z-10"
                             >
-                                <div className="flex flex-col gap-4">
-                                    {hero.stats.map((stat, i) => (
-                                        <div key={i} className="flex items-center gap-3 border-b border-white/10 last:border-0 pb-3 last:pb-0">
-                                            <div className="w-10 h-10 rounded-full bg-orange/20 flex items-center justify-center text-orange shrink-0">
-                                                {i === 0 && (
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                                                )}
-                                                {i === 1 && (
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                                )}
-                                                {i === 2 && (
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
-                                                )}
-                                            </div>
-                                            <div>
-                                                <p className="text-lg font-bold text-white leading-none">{stat.value}</p>
-                                                <p className="text-xs text-white/60 mt-0.5">{stat.label}</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                <StatsCard
+                                    variant="vertical"
+                                    stats={hero.stats}
+                                    className="max-w-[180px]"
+                                />
                             </motion.div>
                         </motion.div>
                     </AnimatePresence>

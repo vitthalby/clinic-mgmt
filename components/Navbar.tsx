@@ -76,16 +76,19 @@ export default function Navbar() {
                             ))}
                         </div>
 
-                        <button className="hidden md:block px-5 py-2 rounded-full bg-white text-black text-sm font-semibold hover:bg-gray-200 transition-colors">
-                            Book Now
-                        </button>
+                        {/* Call & WhatsApp Buttons */}
+                        <div className="flex items-center gap-4">
+                            <button className="hidden md:block px-5 py-2 rounded-full bg-white text-black text-sm font-semibold hover:bg-gray-200 transition-colors">
+                                Book Now
+                            </button>
 
-                        {/* Mobile Menu Button */}
-                        <button className="md:hidden text-white p-2">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                            </svg>
-                        </button>
+                            {/* Mobile Menu Button */}
+                            <button className="md:hidden text-white p-2">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

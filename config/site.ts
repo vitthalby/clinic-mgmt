@@ -16,6 +16,6 @@ export const siteConfig = {
         facebook: "https://www.facebook.com/people/FitSquare-Physio/61562617023947/",
     },
     links: {
-        googleReviews: "https://www.google.com/search?q=your+clinic+reviews"
+        googleReviews: "https://share.google/GmWhheKyR67Csm7L8"
     }
 }
