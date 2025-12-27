@@ -52,6 +52,7 @@ function StatsCard({ className, variant = "vertical", stats }: { className?: str
 
 export default function Hero() {
     const [activeService, setActiveService] = useState(0)
+    const [activeStat, setActiveStat] = useState(0)
     const { hero } = landingPageData
 
     useEffect(() => {
@@ -60,6 +61,14 @@ export default function Hero() {
         }, 3000)
         return () => clearInterval(interval)
     }, [hero.services.length])
+
+    // Cycle stats every 2.5 seconds
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setActiveStat((prev) => (prev + 1) % hero.stats.length)
+        }, 2500)
+        return () => clearInterval(interval)
+    }, [hero.stats.length])
 
     return (
         <section className="relative min-h-[105svh] lg:min-h-screen flex flex-col lg:flex-row lg:items-center pt-0 lg:pt-10 overflow-hidden">
@@ -79,35 +88,6 @@ export default function Hero() {
             <div className="absolute inset-0 pointer-events-none hidden lg:block">
                 <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-orange/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" />
                 <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-blue/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" />
-            </div>
-
-            {/* Mobile Stats - Absolute Left Vertical Stack */}
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 z-20 lg:hidden flex flex-col gap-3">
-                {hero.stats.map((stat, i) => (
-                    <motion.div
-                        key={i}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.5, delay: 0.5 + (i * 0.1) }}
-                        className="bg-surface-highlight/40 backdrop-blur-md border border-white/10 rounded-full px-3 py-2 flex items-center gap-3 w-max"
-                    >
-                        <div className="text-orange">
-                            {i === 0 && (
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                            )}
-                            {i === 1 && (
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                            )}
-                            {i === 2 && (
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
-                            )}
-                        </div>
-                        <div className="flex flex-col">
-                            <span className="text-sm font-bold text-white leading-none">{stat.value}</span>
-                            <span className="text-[9px] text-white/60 leading-none">{stat.label}</span>
-                        </div>
-                    </motion.div>
-                ))}
             </div>
 
             <div className="container mx-auto px-4 relative z-10 flex flex-col lg:flex-row items-stretch lg:items-center h-full lg:h-auto flex-grow lg:flex-grow-0 justify-between lg:justify-center pb-12 lg:pb-0 pt-28 lg:pt-0">
@@ -162,7 +142,7 @@ export default function Hero() {
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             transition={{ duration: 0.5, delay: 0.25 }}
-                            className="mb-6 lg:mb-8 w-full relative"
+                            className="mb-4 lg:mb-8 w-full relative"
                         >
                             {/* Innovative 'Stream' Look */}
                             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
@@ -172,6 +152,38 @@ export default function Hero() {
                                 <KeywordTicker keywords={hero.keywords} />
                             </div>
                         </motion.div>
+
+                        {/* Mobile Single Stat Rotator */}
+                        <div className="lg:hidden h-14 mb-4 flex justify-center items-center overflow-hidden">
+                            <AnimatePresence mode="wait">
+                                <motion.div
+                                    key={activeStat}
+                                    initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: -20, scale: 0.9 }}
+                                    transition={{ duration: 0.3 }}
+                                    className="bg-surface-highlight/60 backdrop-blur-md border border-white/20 rounded-full px-5 py-2 flex items-center gap-3 shadow-xl"
+                                >
+                                    <div className="w-8 h-8 rounded-full bg-orange/20 flex items-center justify-center text-orange shrink-0">
+                                        {activeStat === 0 && (
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                                        )}
+                                        {activeStat === 1 && (
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        )}
+                                        {activeStat === 2 && (
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-col items-start">
+                                        <span className="text-base font-bold text-white leading-none">{hero.stats[activeStat].value}</span>
+                                        <span className="text-[10px] text-white/80 leading-none">{hero.stats[activeStat].label}</span>
+                                    </div>
+                                </motion.div>
+                            </AnimatePresence>
+                        </div>
+
+
 
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
@@ -250,6 +262,6 @@ export default function Hero() {
                     </AnimatePresence>
                 </div>
             </div>
-        </section>
+        </section >
     )
 }
