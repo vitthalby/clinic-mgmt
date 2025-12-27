@@ -4,6 +4,9 @@ import { motion } from 'framer-motion'
 import SectionHeader from './SectionHeader'
 
 import { siteConfig } from '@/config/site'
+import { useFormState, useFormStatus } from 'react-dom'
+import { sendContactEmail } from '@/app/actions/send-email'
+import { useEffect, useRef } from 'react'
 
 export default function Contact() {
     return (
@@ -24,38 +27,7 @@ export default function Contact() {
                         viewport={{ once: true }}
                         className="bg-surface-card border border-white/10 rounded-2xl p-6 flex flex-col justify-center"
                     >
-                        <form className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-white/60">First Name</label>
-                                    <input type="text" className="w-full bg-surface-highlight border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-colors" placeholder="John" />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-white/60">Last Name</label>
-                                    <input type="text" className="w-full bg-surface-highlight border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-colors" placeholder="Doe" />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-white/60">Phone</label>
-                                    <input type="tel" className="w-full bg-surface-highlight border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-colors" placeholder="+1 (555) 000-0000" />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-white/60">Email</label>
-                                    <input type="email" className="w-full bg-surface-highlight border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-colors" placeholder="john@example.com" />
-                                </div>
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-white/60">Message</label>
-                                <textarea rows={3} className="w-full bg-surface-highlight border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-colors resize-none" placeholder="How can we help?" />
-                            </div>
-
-                            <button type="submit" className="w-full btn-primary py-3 text-sm font-medium">
-                                Send Message
-                            </button>
-                        </form>
+                        <ContactForm />
                     </motion.div>
 
                     {/* Map & Info Overlay */}
@@ -118,5 +90,84 @@ export default function Contact() {
                 </div>
             </div>
         </section>
+    )
+}
+
+function SubmitButton() {
+    const { pending } = useFormStatus()
+
+    return (
+        <button
+            type="submit"
+            disabled={pending}
+            className="w-full btn-primary py-3 text-sm font-medium disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+            {pending ? (
+                <>
+                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Sending...
+                </>
+            ) : (
+                'Send Message'
+            )}
+        </button>
+    )
+}
+
+function ContactForm() {
+    const [state, formAction] = useFormState(sendContactEmail, { success: false, error: '' })
+    const formRef = useRef<HTMLFormElement>(null)
+
+    useEffect(() => {
+        if (state.success && formRef.current) {
+            formRef.current.reset()
+        }
+    }, [state.success])
+
+    return (
+        <form action={formAction} ref={formRef} className="space-y-4">
+            {state.error && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-sm p-3 rounded-lg">
+                    {state.error}
+                </div>
+            )}
+            {state.success && (
+                <div className="bg-green-500/10 border border-green-500/20 text-green-500 text-sm p-3 rounded-lg">
+                    Message sent successfully! We'll get back to you soon.
+                </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-white/60">First Name</label>
+                    <input name="firstName" required type="text" className="w-full bg-surface-highlight border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-colors" placeholder="John" />
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-white/60">Last Name</label>
+                    <input name="lastName" type="text" className="w-full bg-surface-highlight border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-colors" placeholder="Doe" />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-white/60">Phone</label>
+                    <input name="phone" type="tel" className="w-full bg-surface-highlight border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-colors" placeholder="+1 (555) 000-0000" />
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-white/60">Email</label>
+                    <input name="email" required type="email" className="w-full bg-surface-highlight border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-colors" placeholder="john@example.com" />
+                </div>
+            </div>
+
+            <div className="space-y-1.5">
+                <label className="text-xs font-medium text-white/60">Message</label>
+                <textarea name="message" required rows={3} className="w-full bg-surface-highlight border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-colors resize-none" placeholder="How can we help?" />
+            </div>
+
+            <SubmitButton />
+        </form>
     )
 }

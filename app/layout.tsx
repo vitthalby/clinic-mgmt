@@ -15,6 +15,8 @@ const playfair = Playfair_Display({
 
 import { siteConfig } from '@/config/site'
 import FloatingContact from '@/components/FloatingContact'
+import Navbar from '@/components/Navbar'
+import Footer from '@/components/Footer'
 
 export const metadata = {
   title: {
@@ -44,7 +46,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${outfit.variable} ${playfair.variable}`}>
       <body className={outfit.className}>
+        <Navbar />
         {children}
+        <Footer />
         <FloatingContact />
       </body>
     </html>

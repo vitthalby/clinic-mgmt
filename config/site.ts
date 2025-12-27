@@ -17,5 +17,21 @@ export const siteConfig = {
     },
     links: {
         googleReviews: "https://share.google/GmWhheKyR67Csm7L8"
+    },
+    pages: {
+        home: {
+            hashtags: ['Physiotherapy', 'Wellness', 'Recovery', 'Health']
+        },
+        contact: {
+            hashtags: ['Physiotherapy', 'Rehabilitation', 'Sports Injury', 'Chiro'],
+            services: [
+                "Consultation",
+                "Physiotherapy Session",
+                "Matrix Rhythm Therapy",
+                "Cupping Therapy",
+                "Sports Injury Treatment",
+                "Post-Surgery Rehab"
+            ]
+        }
     }
 }
