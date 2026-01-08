@@ -49,7 +49,7 @@ jobs:
           SOURCE: "deploy_package/"
           REMOTE_HOST: ${{ secrets.VPS_HOST }}
           REMOTE_USER: ${{ secrets.VPS_USER }}
-          TARGET: ${{ secrets.VPS_TARGET_DIR || '/var/www/clinic-mgmt' }}
+          TARGET: ${{ secrets.VPS_TARGET_DIR || '/var/www/clinic-mgmt-app' }}
           EXCLUDE: ".env*" # Exclude .env files from deletion 
           # Default to /var/www/clinic-mgmt if secret not set, but arguably better to fail if not set? 
           # The user prompt implied "configured user", so let's stick to using secrets.
