@@ -56,13 +56,21 @@ export default function Footer() {
                     <div>
                         <h4 className="font-semibold mb-6">Quick Links</h4>
                         <ul className="space-y-4">
-                            {['About Us', 'Our Services', 'Specialists', 'Blog', 'Contact'].map((item) => (
-                                <li key={item}>
-                                    <a href="#" className="text-white/60 hover:text-orange transition-colors text-sm">
-                                        {item}
-                                    </a>
-                                </li>
-                            ))}
+                            {['About Us', 'Our Services', 'Specialists', 'Blog', 'Contact'].map((item) => {
+                                let href = '#';
+                                if (item === 'About Us') href = '#about';
+                                if (item === 'Our Services') href = '#services';
+                                if (item === 'Specialists') href = '#services'; // Assuming specialists are under services or a similar section
+                                if (item === 'Blog') href = '#blog';
+                                if (item === 'Contact') href = '/contact';
+                                return (
+                                    <li key={item}>
+                                        <a href={href} className="text-white/60 hover:text-orange transition-colors text-sm">
+                                            {item}
+                                        </a>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     </div>
 

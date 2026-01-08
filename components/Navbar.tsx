@@ -4,10 +4,13 @@ import { motion } from 'framer-motion'
 import { useState, useEffect } from 'react'
 import { siteConfig } from '@/config/site'
 import Image from 'next/image'
-
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 
 export default function Navbar() {
     const [scrolled, setScrolled] = useState(false)
+    const pathname = usePathname()
+    const isHome = pathname === '/'
 
     useEffect(() => {
         const handleScroll = () => {
@@ -37,7 +40,7 @@ export default function Navbar() {
                     : 'bg-transparent px-0 py-0'
                     }`}>
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                        <Link href="/" className="flex items-center gap-3 cursor-pointer">
                             {/* Logo Icon */}
                             {/* Logo Image */}
                             <motion.div
@@ -61,31 +64,58 @@ export default function Navbar() {
                                     {siteConfig.category}
                                 </span>
                             </div>
-                        </div>
+                        </Link>
 
                         <div className="hidden md:flex items-center gap-8">
-                            {['Services', 'About', 'Blog', 'Contact'].map((item) => (
-                                <button
-                                    key={item}
-                                    onClick={() => scrollToSection(item.toLowerCase())}
-                                    className="text-sm font-medium text-white/70 hover:text-white transition-colors relative group"
-                                >
-                                    {item}
-                                    <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-orange transition-all group-hover:w-full" />
-                                </button>
-                            ))}
+                            {['Services', 'About', 'Blog', 'Contact'].map((item) => {
+                                const targetId = item.toLowerCase()
+                                const isGoalPage = item === 'Contact'
+
+                                if (isGoalPage) {
+                                    return (
+                                        <Link
+                                            key={item}
+                                            href="/contact"
+                                            className={`text-sm font-medium transition-colors relative group ${pathname === '/contact' ? 'text-white' : 'text-white/70 hover:text-white'}`}
+                                        >
+                                            {item}
+                                            <span className={`absolute -bottom-1 left-0 h-0.5 bg-orange transition-all ${pathname === '/contact' ? 'w-full' : 'w-0 group-hover:w-full'}`} />
+                                        </Link>
+                                    )
+                                }
+
+                                return (
+                                    <button
+                                        key={item}
+                                        onClick={() => {
+                                            if (isHome) {
+                                                scrollToSection(targetId)
+                                            } else {
+                                                window.location.href = `/#${targetId}`
+                                            }
+                                        }}
+                                        className="text-sm font-medium text-white/70 hover:text-white transition-colors relative group"
+                                    >
+                                        {item}
+                                        <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-orange transition-all group-hover:w-full" />
+                                    </button>
+                                )
+                            })}
                         </div>
 
-                        <button className="hidden md:block px-5 py-2 rounded-full bg-white text-black text-sm font-semibold hover:bg-gray-200 transition-colors">
-                            Book Now
-                        </button>
+                        {/* Call & WhatsApp Buttons */}
+                        <div className="flex items-center gap-4">
+                            <Link href="/contact" className="hidden md:block px-5 py-2 rounded-full bg-white text-black text-sm font-semibold hover:bg-gray-200 transition-colors">
+                                Book Now
+                            </Link>
 
-                        {/* Mobile Menu Button */}
-                        <button className="md:hidden text-white p-2">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                            </svg>
-                        </button>
+                            {/* Mobile Menu Button */}
+                            <button className="md:hidden text-white p-2">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

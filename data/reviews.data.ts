@@ -3,60 +3,39 @@ import { ReviewData } from '@/types/cards'
 export const reviewsData: ReviewData[] = [
     {
         id: 1,
-        name: "Sarah Johnson",
-        role: "Marathon Runner",
+        name: "Rajesh Venkateswaran",
+        role: "Office Professional",
         rating: 5,
-        text: "The physiotherapy team helped me recover from a knee injury faster than I expected. Their personalized approach made all the difference.",
+        text: "I have been visiting Aksheta madam for the last couple of months for my recurring back issus, and I am feeling better than before. Special thanks to madam.",
     },
     {
         id: 2,
-        name: "Michael Chen",
-        role: "Office Professional",
+        name: "Sameer Subhedar",
+        role: "IT Professional",
         rating: 5,
-        text: "After years of chronic back pain from desk work, I finally found relief. The treatment plan has been life-changing.",
+        text: "I visited Fit Square Physiotherapy centre last week for upper back pain. She examined my condition property and I felt a lot better after 3 Sessions of Matrix Rhythm Physiotherapy. I will definitely recommend Dr Aksheta and she is one of the best physiotherapist in wakad area.",
     },
     {
         id: 3,
-        name: "Emma Williams",
-        role: "Yoga Instructor",
+        name: "Niti Jain",
+        role: "Self Employed",
         rating: 5,
-        text: "Professional, caring, and incredibly knowledgeable. They treated my shoulder injury and taught me preventive exercises.",
+        text: "I would like to sincerely thank Dr. Aksheta for her exceptional physiotherapy treatment for my mother's shoulder pain. She is highly skilled, attentive, and compassionate in her approach",
     },
     {
         id: 4,
-        name: "David Martinez",
-        role: "Construction Worker",
+        name: "Salim Shaikh",
+        role: "Professional",
         rating: 5,
-        text: "Outstanding service! They helped me get back to work after a serious back injury. Highly recommend their expertise.",
+        text: "I took my mom for knee IFT and Matrix therapy sessions, and from the moment we stepped in, we were made to feel at ease. Mam was incredibly welcoming and took the time to thoroughly understand my mom’s medical reports and concerns.",
     },
     {
         id: 5,
-        name: "Lisa Anderson",
-        role: "Teacher",
+        name: "Harshit Gupts",
+        role: "Professional",
         rating: 5,
-        text: "The team is amazing! They helped me overcome neck pain and improve my posture. Very grateful for their care.",
-    },
-    {
-        id: 6,
-        name: "James Wilson",
-        role: "Athlete",
-        rating: 5,
-        text: "Best physiotherapy experience I've had. They understood my needs as an athlete and got me back in the game quickly.",
-    },
-    {
-        id: 7,
-        name: "Rachel Green",
-        role: "Dancer",
-        rating: 5,
-        text: "Exceptional care and attention to detail. They helped me recover from a foot injury and return to performing.",
-    },
-    {
-        id: 8,
-        name: "Tom Harris",
-        role: "Senior Citizen",
-        rating: 5,
-        text: "The staff is patient and understanding. They've helped me maintain mobility and reduce arthritis pain significantly.",
-    },
+        text: "I  have been treated on a very critical issue post surgery where my implants have broken. Dr Aksheta has treated this issue very carefully. I met and have taken thrapies with many physio in past, but I wanted to call out Dr Aksheta stands out completely different.",
+    }
 ]
 
-export const GOOGLE_REVIEWS_URL = "https://www.google.com/search?q=your+clinic+reviews"
+export const GOOGLE_REVIEWS_URL = "https://share.google/GmWhheKyR67Csm7L8"

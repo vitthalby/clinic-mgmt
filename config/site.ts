@@ -16,6 +16,22 @@ export const siteConfig = {
         facebook: "https://www.facebook.com/people/FitSquare-Physio/61562617023947/",
     },
     links: {
-        googleReviews: "https://www.google.com/search?q=your+clinic+reviews"
+        googleReviews: "https://share.google/GmWhheKyR67Csm7L8"
+    },
+    pages: {
+        home: {
+            hashtags: ['Physiotherapy', 'Wellness', 'Recovery', 'Health']
+        },
+        contact: {
+            hashtags: ['Physiotherapy', 'Rehabilitation', 'Sports Injury', 'Chiro'],
+            services: [
+                "Consultation",
+                "Physiotherapy Session",
+                "Matrix Rhythm Therapy",
+                "Cupping Therapy",
+                "Sports Injury Treatment",
+                "Post-Surgery Rehab"
+            ]
+        }
     }
 }
