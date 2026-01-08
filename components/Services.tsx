@@ -28,7 +28,7 @@ export default function Services() {
                             topRight={service.icon}
                             actionButton={{
                                 label: 'Book Now',
-                                onClick: () => window.location.href = service.links?.bookNow || '#contact',
+                                href: service.links?.bookNow || '/contact',
                                 variant: 'primary'
                             }}
                         />

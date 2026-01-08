@@ -192,7 +192,7 @@ export default function Hero() {
                             className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 justify-center lg:justify-start"
                         >
                             <Link
-                                href="/book"
+                                href="/contact"
                                 className="w-full sm:w-auto px-8 py-3 bg-orange text-white rounded-full font-semibold hover:bg-orange/90 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-orange/25"
                             >
                                 {hero.cta.primary}

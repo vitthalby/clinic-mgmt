@@ -1,6 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import Link from 'next/link'
 import { CardProps } from '@/types/cards'
 
 export default function Card({
@@ -23,7 +24,7 @@ export default function Card({
             className={`glass-card p-0 md:p-4 rounded-2xl group relative overflow-hidden hover:shadow-[0_20px_60px_rgba(255,61,0,0.15)] transition-shadow duration-500 h-full flex flex-col ${className}`}
         >
             {/* Animated gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-br from-orange/0 via-orange/0 to-orange/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="absolute inset-0 bg-gradient-to-br from-orange/0 via-orange/0 to-orange/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
             {/* Mobile First Content Structure */}
             <div className="flex flex-col h-full">
@@ -69,7 +70,7 @@ export default function Card({
                     <div className="mt-auto pt-3 border-t border-white/5 group-hover:border-white/10 transition-colors duration-300">
                         {actionButton && (
                             actionButton.href ? (
-                                <a
+                                <Link
                                     href={actionButton.href}
                                     className={`w-full md:w-auto px-3 py-1.5 md:py-1.5 rounded-lg md:rounded-full text-[10px] font-medium transition-all duration-200 inline-block text-center ${actionButton.variant === 'primary'
                                         ? 'bg-orange text-white hover:bg-orange/80'
@@ -77,7 +78,7 @@ export default function Card({
                                         }`}
                                 >
                                     {actionButton.label}
-                                </a>
+                                </Link>
                             ) : (
                                 <button
                                     onClick={actionButton.onClick}
