@@ -14,12 +14,14 @@ export default function Card({
     subtitle,
     actionButton,
     className = '',
+    layoutId,
 }: CardProps) {
     // Generate default image path if not provided
     const imagePath = image || `/images/${type}/cards/${id}.png`
 
     return (
         <motion.div
+            layoutId={layoutId}
             transition={{ type: "spring", stiffness: 400, damping: 25 }}
             className={`glass-card p-0 md:p-4 rounded-2xl group relative overflow-hidden hover:shadow-[0_20px_60px_rgba(255,61,0,0.15)] transition-shadow duration-500 h-full flex flex-col ${className}`}
         >

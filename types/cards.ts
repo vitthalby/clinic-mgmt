@@ -15,6 +15,7 @@ export interface CardProps {
         variant: 'primary' | 'secondary'
     }
     className?: string
+    layoutId?: string
 }
 
 export interface CardCarouselProps {
@@ -34,8 +35,10 @@ export interface ServiceData {
     id: string
     title: string
     description: string
+    details: ReactNode // Detailed description for the expanded view
     category: string
     icon: ReactNode
+    largeImage?: string // Optional larger image for detailed view
     links?: {
         bookNow?: string
         learnMore?: string
