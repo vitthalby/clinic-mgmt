@@ -2,6 +2,7 @@
 
 import { siteConfig } from '@/config/site'
 import Image from 'next/image'
+import Link from 'next/link'
 
 export default function Footer() {
     return (
@@ -59,15 +60,24 @@ export default function Footer() {
                             {['About Us', 'Our Services', 'Specialists', 'Blog', 'Contact'].map((item) => {
                                 let href = '#';
                                 if (item === 'About Us') href = '#about';
-                                if (item === 'Our Services') href = '#services';
-                                if (item === 'Specialists') href = '#services'; // Assuming specialists are under services or a similar section
+                                if (item === 'Our Services') href = '/services';
+                                if (item === 'Specialists') href = '/services';
                                 if (item === 'Blog') href = '#blog';
                                 if (item === 'Contact') href = '/contact';
+
+                                const isInternalPage = href.startsWith('/');
+
                                 return (
                                     <li key={item}>
-                                        <a href={href} className="text-white/60 hover:text-orange transition-colors text-sm">
-                                            {item}
-                                        </a>
+                                        {isInternalPage ? (
+                                            <Link href={href} className="text-white/60 hover:text-orange transition-colors text-sm">
+                                                {item}
+                                            </Link>
+                                        ) : (
+                                            <a href={href} className="text-white/60 hover:text-orange transition-colors text-sm">
+                                                {item}
+                                            </a>
+                                        )}
                                     </li>
                                 );
                             })}
