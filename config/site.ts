@@ -2,6 +2,7 @@ export const siteConfig = {
     name: "FitSquare",
     tagline: "Expert Physiotherapy Care",
     category: "Physiotherapy Center",
+    location: "Wakad, Pune",
     description: "Empowering you to move freely and live pain-free.",
     contact: {
         address: "D-209, Suyog Business Center, Near Skyline Society, Wakad, Pune 411057",

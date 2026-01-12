@@ -76,7 +76,7 @@ export default function Navbar() {
                         <div className="hidden md:flex items-center gap-8">
                             {menuItems.map((item) => {
                                 const targetId = item.toLowerCase()
-                                const isDedicatedPage = ['Services', 'Contact'].includes(item)
+                                const isDedicatedPage = ['Services', 'Contact', 'About'].includes(item)
 
                                 if (isDedicatedPage) {
                                     const href = `/${targetId}`
@@ -146,7 +146,7 @@ export default function Navbar() {
                             <div className="flex flex-col p-6 gap-4">
                                 {menuItems.map((item) => {
                                     const targetId = item.toLowerCase()
-                                    const isDedicatedPage = ['Services', 'Contact'].includes(item)
+                                    const isDedicatedPage = ['Services', 'Contact', 'About'].includes(item)
 
                                     if (isDedicatedPage) {
                                         const href = `/${targetId}`
