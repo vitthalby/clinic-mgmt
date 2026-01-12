@@ -46,10 +46,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${outfit.variable} ${playfair.variable}`}>
       <body className={outfit.className}>
-        <Navbar />
         {children}
-        <Footer />
-        <FloatingContact />
       </body>
     </html>
   )

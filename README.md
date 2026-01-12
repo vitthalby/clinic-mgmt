@@ -27,86 +27,82 @@ A modern, dark-themed physiotherapy clinic website built with Next.js, featuring
 
 ### Prerequisites
 
-- Node.js 18.x or higher
-- npm or yarn package manager
+- **Node.js**: 18.x or higher
+- **Docker**: For running the local Postgres database
+- **Google Cloud Console Account**: For setting up Google OAuth
 
-### Installation
+### Local Setup
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd clinic-mgmt
-```
+1. **Clone and Install**:
+   ```bash
+   git clone <repository-url>
+   cd clinic-mgmt
+   npm install
+   ```
 
-2. Install dependencies:
-```bash
-npm install
-# or
-yarn install
-```
+2. **Environment Configuration**:
+   Copy the example environment file and fill in your credentials:
+   ```bash
+   cp .env.example .env.local
+   ```
+   *Note: You will need to generate an `AUTH_SECRET` (run `npx auth secret`) and set up a Google OAuth Client in the [Google Cloud Console](https://console.cloud.google.com/).*
 
-3. Run the development server:
-```bash
-npm run dev
-# or
-yarn dev
-```
+3. **Start the Database**:
+   Use Docker to launch the local Postgres instance:
+   ```bash
+   cd docker
+   docker-compose up -d
+   cd ..
+   ```
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser to see the result.
+4. **Synchronize Database Schema**:
+   Push the Drizzle schema to your local database:
+   ```bash
+   npx drizzle-kit push
+   ```
 
-### Build for Production
+5. **Run the Development Server**:
+   ```bash
+   npm run dev
+   ```
 
-```bash
-npm run build
-# or
-yarn build
-```
+6. **First Login**:
+   - Visit `http://localhost:3000/management`.
+   - Ensure `ALLOW_REGISTRATION="true"` is set in your `.env.local` for the first login.
+   - Sign in with Google to create your admin account.
+   - Once logged in, set `ALLOW_REGISTRATION="false"` to secure the system.
 
-### Start Production Server
-
-```bash
-npm start
-# or
-yarn start
-```
+### Access URLs
+- **Main Website**: [http://localhost:3000](http://localhost:3000)
+- **Management Dashboard**: [http://localhost:3000/management](http://localhost:3000/management)
+- **Database Explorer (Drizzle Studio)**: `npx drizzle-kit studio`
 
 ## 📁 Project Structure
 
 ```
 clinic-mgmt/
 ├── app/                    # Next.js app directory
-│   ├── globals.css        # Global styles and utility classes
-│   ├── layout.tsx         # Root layout component
-│   └── page.tsx           # Main landing page
+│   ├── (site)/            # Public website routes
+│   ├── (management)/      # Secure management dashboard routes
+│   └── api/auth/          # NextAuth API routes
 ├── components/            # React components
-│   ├── Hero.tsx          # Hero section with rotating cards
-│   ├── Services.tsx      # Services carousel
-│   ├── Navbar.tsx        # Navigation bar
-│   └── Footer.tsx        # Footer component
-├── public/               # Static assets
-│   └── images/          # Service images
-├── tailwind.config.ts   # Tailwind CSS configuration
-└── package.json         # Project dependencies
+│   ├── (site)/            # Website specific components
+│   └── management/        # Dashboard specific components
+├── docker/                 # Docker configuration (Postgres)
+├── lib/                    # Shared libraries (DB, Schema)
+├── public/                # Static assets
+└── drizzle/                # Generated database migrations
 ```
-
-## 🎯 Services Offered
-
-1. **Matrix Rhythm Therapy** - Cellular level regeneration
-2. **Cupping Therapy** - Ancient suction technique
-3. **Pain Management** - Chronic and acute pain relief
-4. **Kinesiology Taping** - Muscle and joint support
-5. **Post-Surgical Rehab** - Recovery protocols
-6. **Dry Needling** - Trigger point release
-7. **Ultrasound Therapy** - Deep heat therapy
 
 ## 🛠️ Tech Stack
 
-- **Framework**: Next.js 14.2.33
-- **Language**: TypeScript
+- **Framework**: Next.js 14
+- **Database**: Postgres (Local via Docker)
+- **ORM**: Drizzle ORM
+- **Authentication**: Auth.js (NextAuth v5)
 - **Styling**: Tailwind CSS
 - **Animations**: Framer Motion
-- **UI Components**: Custom React components
-- **Icons**: Heroicons (via SVG)
+- **Language**: TypeScript
 
 ## 🎨 Customization
 
