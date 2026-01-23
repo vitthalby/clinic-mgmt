@@ -10,27 +10,18 @@ import {
 } from "drizzle-orm/pg-core"
 import type { AdapterAccount } from "@auth/core/adapters"
 
-// --- CLINIC (TENANT) ---
-export const clinics = pgTable("clinics", {
-    id: uuid("id").defaultRandom().primaryKey(),
-    name: text("name").notNull(),
-    slug: text("slug").unique().notNull(), // for subdomain
-    description: text("description"),
-    logoUrl: text("logo_url"),
-    config: jsonb("config").$type<Record<string, any>>().default({}),
-    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
-})
-
 // --- USERS ---
 export const users = pgTable("user", {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
     name: text("name"),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    mobile: text("mobile"),
+    dob: timestamp("dob", { mode: "date" }),
     email: text("email").notNull().unique(),
     emailVerified: timestamp("emailVerified", { mode: "date" }),
     image: text("image"),
-    role: text("role").default("STAFF"), // ADMIN, STAFF
-    clinicId: uuid("clinic_id").references(() => clinics.id),
+    role: text("role").default("STAFF"), // Legacy/Simple Role
 })
 
 // --- AUTH TABLES (NextAuth) ---
@@ -82,7 +73,6 @@ export const verificationTokens = pgTable(
 
 export const customers = pgTable("customers", {
     id: uuid("id").defaultRandom().primaryKey(),
-    clinicId: uuid("clinic_id").notNull().references(() => clinics.id),
     name: text("name").notNull(),
     email: text("email"),
     phone: text("phone"),
@@ -93,7 +83,6 @@ export const customers = pgTable("customers", {
 
 export const appointments = pgTable("appointments", {
     id: uuid("id").defaultRandom().primaryKey(),
-    clinicId: uuid("clinic_id").notNull().references(() => clinics.id),
     customerId: uuid("customer_id").references(() => customers.id),
     title: text("title").notNull(),
     startTime: timestamp("start_time", { mode: "date" }).notNull(),
@@ -105,7 +94,6 @@ export const appointments = pgTable("appointments", {
 
 export const payments = pgTable("payments", {
     id: uuid("id").defaultRandom().primaryKey(),
-    clinicId: uuid("clinic_id").notNull().references(() => clinics.id),
     customerId: uuid("customer_id").references(() => customers.id),
     appointmentId: uuid("appointment_id").references(() => appointments.id),
     amount: integer("amount").notNull(), // in cents/paisa
@@ -114,3 +102,61 @@ export const payments = pgTable("payments", {
     status: text("status").default("COMPLETED"), // PENDING, COMPLETED
     date: timestamp("date", { mode: "date" }).defaultNow(),
 })
+
+// --- BRANCHES ---
+export const branches = pgTable("branches", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    address: text("address"),
+    phone: text("phone"),
+    email: text("email"),
+    pinCode: text("pin_code"),
+    state: text("state"),
+    isActive: boolean("is_active").default(true),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+})
+
+// --- ROLES ---
+export const roles = pgTable("roles", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull().unique(),
+    description: text("description"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+})
+
+// --- USER-BRANCH MAPPING ---
+// Maps users to specific branches. 
+export const userBranches = pgTable(
+    "user_branches",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        branchId: uuid("branch_id")
+            .notNull()
+            .references(() => branches.id, { onDelete: "cascade" }),
+        createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    },
+    (t) => ({
+        pk: primaryKey({ columns: [t.userId, t.branchId] }),
+    })
+)
+
+// --- ROLES MAPPING (Optional if M:N, but likely 1:N or using roleId in users) ---
+export const userRoles = pgTable(
+    "user_roles",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        roleId: uuid("role_id")
+            .notNull()
+            .references(() => roles.id, { onDelete: "cascade" }),
+        createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    },
+    (t) => ({
+        pk: primaryKey({ columns: [t.userId, t.roleId] }),
+    })
+)

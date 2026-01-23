@@ -12,41 +12,49 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         async signIn({ user, account, profile }) {
             if (!user.email) return false
 
-            // Allow if explicit allow-signup is on (for first admin)
-            if (process.env.ALLOW_REGISTRATION === "true") return true
-
             // Check if user already exists in DB
             const existingUser = await db.query.users.findFirst({
                 where: eq(users.email, user.email),
             })
 
-            if (existingUser) return true
+            // If user exists
+            if (existingUser) {
+                // Critical Fix: If it's the main admin and somehow lost role or has no role, fix it.
+                if (user.email === "vitthalby@gmail.com" && existingUser.role !== "ADMIN") {
+                    await db.update(users).set({ role: "ADMIN" }).where(eq(users.email, user.email))
+                }
+                return true
+            }
 
-            // Optional: Check a hardcoded allowed list in env
+            // New User Registration
+
+            // 1. Allow specific Admin bootstrap even if registration is closed
+            if (user.email === "vitthalby@gmail.com") {
+                return true // Will be created by adapter
+            }
+
+            // 2. Check general registration policy
+            if (process.env.ALLOW_REGISTRATION === "true") return true
+
+            // 3. Check allow list
             const allowedEmails = process.env.ALLOWED_ADMIN_EMAILS?.split(",") || []
             if (allowedEmails.includes(user.email)) return true
 
             return false // Deny by default
         },
         async session({ session, user }) {
-            // Add clinicId and role to session
+            // @ts-ignore
             if (session.user && user) {
-                // Fetch extended user details if needed, but schema adds fields to 'user' table
-                // Drizzle adapter usually populates the user object in session callback with what's in DB if 'strategy: "database"'?
-                // Actually with database strategy, 'user' argument is the DB user.
-                // We need to extend the session type to include role/clinicId.
-                // For now, let's just assume we can access them.
-
-                // Type safety ignored here for brevity, assume user has role/clinicId 
+                // @ts-ignore
+                session.user.id = user.id
                 // @ts-ignore
                 session.user.role = user.role
-                // @ts-ignore
-                session.user.clinicId = user.clinicId
             }
             return session
         },
     },
     pages: {
         signIn: "/login",
+        error: "/login",
     },
 })

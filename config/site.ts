@@ -1,5 +1,6 @@
 export const siteConfig = {
     name: "FitSquare",
+    logo: "/images/logo.jpg",
     tagline: "Expert Physiotherapy Care",
     category: "Physiotherapy Center",
     location: "Wakad, Pune",
