@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { siteConfig } from '@/config/site'
+import { appointmentConfig } from '@/config/appointments'
+import { getAvailableSlots, getMinDate } from '@/lib/appointment-utils'
 import { sendContactEmail } from '@/app/actions/send-email'
 import { useFormState, useFormStatus } from 'react-dom'
 import Image from 'next/image'
@@ -78,12 +80,12 @@ function ContactForm() {
             <input type="text" name="_gotcha" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
             <input type="hidden" name="formType" value="contact" />
 
-            <div className="grid grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <input name="firstName" required type="text" placeholder="First Name" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/40 focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-all hover:bg-white/[0.07]" />
                 <input name="lastName" type="text" placeholder="Last Name" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/40 focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-all hover:bg-white/[0.07]" />
             </div>
 
-            <div className="grid grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <input name="email" required type="email" placeholder="Email Address" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/40 focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-all hover:bg-white/[0.07]" />
                 <input name="phone" type="tel" placeholder="Phone Number" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/40 focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-all hover:bg-white/[0.07]" />
             </div>
@@ -133,10 +135,12 @@ ${originalMessage}
     }, { success: false, error: '' })
 
     const formRef = useRef<HTMLFormElement>(null)
+    const [selectedDate, setSelectedDate] = useState<string>('')
 
     useEffect(() => {
         if (state.success && formRef.current) {
             formRef.current.reset()
+            setSelectedDate('')
         }
     }, [state.success])
 
@@ -175,12 +179,12 @@ ${originalMessage}
             </div>
 
             <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <input name="firstName" required type="text" placeholder="First Name" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/40 focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-all hover:bg-white/[0.07]" />
                     <input name="lastName" type="text" placeholder="Last Name" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/40 focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-all hover:bg-white/[0.07]" />
                 </div>
 
-                <div className="grid grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <input name="email" required type="email" placeholder="Email Address" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/40 focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-all hover:bg-white/[0.07]" />
                     <input name="phone" type="tel" placeholder="Phone Number" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/40 focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-all hover:bg-white/[0.07]" />
                 </div>
@@ -188,23 +192,62 @@ ${originalMessage}
                 {/* Appointment Specific Fields */}
                 <div className="space-y-2">
                     <label className="text-xs font-semibold text-white/50 uppercase tracking-wider ml-1">Type of Service</label>
-                    <select name="service" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/40 focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-all hover:bg-white/[0.07] appearance-none">
-                        {siteConfig.pages.contact.services.map((service) => (
-                            <option key={service} className="bg-zinc-900 text-white" value={service}>
-                                {service}
-                            </option>
-                        ))}
-                    </select>
+                    <div className="relative group">
+                        <select
+                            name="service"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/40 focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-all hover:bg-white/[0.07] appearance-none cursor-pointer"
+                        >
+                            {siteConfig.pages.contact.services.map((service) => (
+                                <option key={service} className="bg-zinc-900 text-white" value={service}>
+                                    {service}
+                                </option>
+                            ))}
+                        </select>
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white/40 group-hover:text-orange transition-colors">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <div className="space-y-2">
                         <label className="text-xs font-semibold text-white/50 uppercase tracking-wider ml-1">Preferred Date</label>
-                        <input name="date" type="date" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/40 focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-all hover:bg-white/[0.07] [color-scheme:dark]" />
+                        <input
+                            name="date"
+                            type="date"
+                            required
+                            min={getMinDate()}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/40 focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-all hover:bg-white/[0.07] [color-scheme:dark]"
+                        />
+                        {selectedDate && !appointmentConfig.businessDays.includes(new Date(selectedDate + 'T00:00:00').getDay()) && (
+                            <p className="text-[10px] text-red-400 ml-1">Closed on this day. Please choose another day.</p>
+                        )}
                     </div>
                     <div className="space-y-2">
                         <label className="text-xs font-semibold text-white/50 uppercase tracking-wider ml-1">Preferred Time</label>
-                        <input name="time" type="time" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/40 focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-all hover:bg-white/[0.07] [color-scheme:dark]" />
+                        <div className="relative group">
+                            <select
+                                name="time"
+                                required
+                                disabled={!selectedDate || !appointmentConfig.businessDays.includes(new Date(selectedDate + 'T00:00:00').getDay())}
+                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/40 focus:border-orange focus:ring-1 focus:ring-orange outline-none transition-all hover:bg-white/[0.07] appearance-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                            >
+                                <option value="" className="bg-zinc-900">Select a slot</option>
+                                {selectedDate && getAvailableSlots(selectedDate).map((slot) => (
+                                    <option key={slot} value={slot} className="bg-zinc-900">
+                                        {slot}
+                                    </option>
+                                ))}
+                            </select>
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white/40 group-hover:text-orange transition-colors">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
