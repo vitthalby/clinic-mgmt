@@ -1,8 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { createRole, updateRole, deleteRole, getRolePermissions } from "@/app/actions/roles"
-import { Plus, Edit2, Trash2 } from "lucide-react" // Removed ShieldCheck
+import { createRole, updateRole, deleteRole, getRolePermissions, getRoles } from "@/app/actions/roles"
+import { Plus, Edit2, Trash2, Building } from "lucide-react"
 import { useFeaturePermissions } from "@/components/providers/PermissionsProvider"
 import PermissionsMatrix, { Feature, Permission } from "@/components/management/PermissionsMatrix"
 
@@ -10,29 +10,68 @@ type Role = {
     id: string
     name: string
     description: string | null
+    branchId: string | null
     createdAt: Date | null
 }
 
-export default function RolesClient({ roles, features, adminRoleName }: { roles: Role[], features: Feature[], adminRoleName: string }) {
+type Branch = {
+    id: string
+    name: string
+}
+
+interface RolesClientProps {
+    roles: Role[]
+    features: Feature[]
+    adminRoleName: string
+    isSuperUser: boolean
+    currentBranchId?: string
+    allBranches: Branch[]
+    currentRoleId?: string
+}
+
+export default function RolesClient({
+    roles: initialRoles,
+    features,
+    adminRoleName,
+    isSuperUser,
+    currentBranchId,
+    allBranches,
+    currentRoleId = ""
+}: RolesClientProps) {
     const { canAdd, canEdit, canDelete } = useFeaturePermissions("roles")
+    const [roles, setRoles] = useState(initialRoles)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingRole, setEditingRole] = useState<Role | null>(null)
-    const [formData, setFormData] = useState({ name: "", description: "" })
+    const [formData, setFormData] = useState({ name: "", description: "", branchId: "" })
     const [permissions, setPermissions] = useState<Permission[]>([])
+    const [filterBranchId, setFilterBranchId] = useState<string>(currentBranchId || "")
+
+    // Create a branch lookup map
+    const branchMap = new Map(allBranches.map(b => [b.id, b.name]))
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         try {
-            if (editingRole) {
-                // For update, we pass permissions
-                await updateRole(editingRole.id, formData, permissions)
-            } else {
-                // For create, we pass permissions
-                await createRole(formData, permissions)
+            const roleData = {
+                name: formData.name,
+                description: formData.description,
+                branchId: isSuperUser ? (formData.branchId || null) : (currentBranchId || null)
             }
+
+            if (editingRole) {
+                await updateRole(editingRole.id, roleData, permissions)
+            } else {
+                await createRole(roleData, permissions)
+            }
+
+            // Refresh roles list using the active filter or current branch
+            const updatedRoles = await getRoles(filterBranchId || currentBranchId, isSuperUser)
+            setRoles(updatedRoles)
+
+
             setIsModalOpen(false)
             setEditingRole(null)
-            setFormData({ name: "", description: "" })
+            setFormData({ name: "", description: "", branchId: "" })
             setPermissions([])
         } catch (error) {
             console.error(error)
@@ -44,6 +83,10 @@ export default function RolesClient({ roles, features, adminRoleName }: { roles:
         if (!confirm("Are you sure you want to delete this role?")) return
         try {
             await deleteRole(id)
+            // Refresh roles list using the active filter or current branch
+            const updatedRoles = await getRoles(filterBranchId || currentBranchId, isSuperUser)
+            setRoles(updatedRoles)
+
         } catch (error) {
             console.error(error)
             alert("Failed to delete role")
@@ -54,11 +97,10 @@ export default function RolesClient({ roles, features, adminRoleName }: { roles:
         setEditingRole(role)
         setFormData({
             name: role.name,
-            description: role.description || ""
+            description: role.description || "",
+            branchId: role.branchId || ""
         })
 
-        // Fetch current permissions for this role
-        // Ideally this should be optimized, but client-side fetch on open is okay for admin panel
         try {
             const rolePerms = await getRolePermissions(role.id)
             const sanitized: Permission[] = rolePerms.map(p => ({
@@ -68,12 +110,6 @@ export default function RolesClient({ roles, features, adminRoleName }: { roles:
                 canEdit: p.canEdit ?? false,
                 canDelete: p.canDelete ?? false,
             }))
-            // Merge with all features to ensure we have entries for new features
-            // Actually PermissionsMatrix handles "missing" entries if we just pass what we have? 
-            // The PermissionsMatrix `getPerm` handles defaults. But `value` prop is state.
-            // If I set `permissions` state to just what's in DB, the Matrix will show defaults for others BUT
-            // if I toggle one, the state update logic in Matrix needs to be robust. 
-            // My Matrix component concats new values. It's safe.
             setPermissions(sanitized)
         } catch (e) {
             console.error("Failed to load permissions", e)
@@ -85,9 +121,15 @@ export default function RolesClient({ roles, features, adminRoleName }: { roles:
 
     const openCreate = () => {
         setEditingRole(null)
-        setFormData({ name: "", description: "" })
+        setFormData({ name: "", description: "", branchId: currentBranchId || "" })
         setPermissions([])
         setIsModalOpen(true)
+    }
+
+    const handleBranchFilterChange = async (branchId: string) => {
+        setFilterBranchId(branchId)
+        const updatedRoles = await getRoles(branchId || undefined, isSuperUser)
+        setRoles(updatedRoles)
     }
 
     return (
@@ -95,17 +137,40 @@ export default function RolesClient({ roles, features, adminRoleName }: { roles:
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Roles & Permissions</h1>
-                    <p className="text-sm text-gray-500 mt-1">Manage user roles and configure their access permissions for each feature.</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                        {isSuperUser
+                            ? "Manage roles across all branches. Use the filter to view branch-specific roles."
+                            : "Manage roles for your current branch."}
+                    </p>
                 </div>
-                {canAdd && (
-                    <button
-                        onClick={openCreate}
-                        className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
-                    >
-                        <Plus size={20} />
-                        Add Role
-                    </button>
-                )}
+                <div className="flex items-center gap-3">
+                    {/* Branch Filter for Super Users */}
+                    {isSuperUser && allBranches.length > 0 && (
+                        <div className="flex items-center gap-2">
+                            <Building size={16} className="text-gray-400" />
+                            <select
+                                className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                value={filterBranchId}
+                                onChange={(e) => handleBranchFilterChange(e.target.value)}
+                            >
+                                <option value="">All Branches</option>
+                                {allBranches.map(branch => (
+                                    <option key={branch.id} value={branch.id}>{branch.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    {canAdd && (
+                        <button
+                            onClick={openCreate}
+                            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+                        >
+                            <Plus size={20} />
+                            Add Role
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="bg-white shadow rounded-lg overflow-hidden border border-gray-200">
@@ -113,38 +178,72 @@ export default function RolesClient({ roles, features, adminRoleName }: { roles:
                     <thead className="bg-gray-50">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role Name</th>
+                            {isSuperUser && (
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Branch</th>
+                            )}
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                         {roles.map((role) => {
-                            const isSystemAdmin = role.name === adminRoleName;
+                            const isSystemAdmin = role.name === adminRoleName && role.branchId === null;
                             return (
                                 <tr key={role.id}>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{role.name}</td>
+                                    {isSuperUser && (
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            {role.branchId ? (
+                                                <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                                                    {branchMap.get(role.branchId) || "Unknown"}
+                                                </span>
+                                            ) : (
+                                                <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">
+                                                    Global
+                                                </span>
+                                            )}
+                                        </td>
+                                    )}
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{role.description}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <div className="flex justify-end gap-2">
-                                            {/* Removed standalone Permissions button as requested, integrated into Edit */}
                                             {canEdit && !isSystemAdmin && (
-                                                <button onClick={() => openEdit(role)} className="text-indigo-600 hover:text-indigo-900 mx-2" title="Edit Role & Permissions">
+                                                <button
+                                                    onClick={() => openEdit(role)}
+                                                    className={`${role.id === currentRoleId ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-900'} mx-2`}
+                                                    disabled={role.id === currentRoleId}
+                                                    title={role.id === currentRoleId ? "You cannot edit your own role" : "Edit Role & Permissions"}
+                                                >
                                                     <Edit2 size={16} />
                                                 </button>
                                             )}
                                             {canDelete && !isSystemAdmin && (
-                                                <button onClick={() => handleDelete(role.id)} className="text-red-600 hover:text-red-900" title="Delete Role">
+                                                <button
+                                                    onClick={() => handleDelete(role.id)}
+                                                    className={`${role.id === currentRoleId ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:text-red-900'} mx-2`}
+                                                    disabled={role.id === currentRoleId}
+                                                    title={role.id === currentRoleId ? "You cannot delete your own role" : "Delete Role"}
+                                                >
                                                     <Trash2 size={16} />
                                                 </button>
                                             )}
-                                            {isSystemAdmin && (
-                                                <span className="text-xs text-gray-400 italic px-2">System Reserved</span>
+                                            {(isSystemAdmin || role.id === currentRoleId) && (
+                                                <span className="text-[10px] text-gray-400 italic px-2">
+                                                    {isSystemAdmin ? 'System Reserved' : 'Your Role'}
+                                                </span>
                                             )}
                                         </div>
                                     </td>
                                 </tr>
                             )
                         })}
+                        {roles.length === 0 && (
+                            <tr>
+                                <td colSpan={isSuperUser ? 4 : 3} className="px-6 py-8 text-center text-gray-500">
+                                    No roles found. {filterBranchId ? "Try selecting a different branch filter." : "Click 'Add Role' to create one."}
+                                </td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
             </div>
@@ -165,7 +264,29 @@ export default function RolesClient({ roles, features, adminRoleName }: { roles:
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
                                     />
                                 </div>
-                                <div>
+
+                                {/* Branch Selection for Super Users */}
+                                {isSuperUser && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">Branch</label>
+                                        <select
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 text-gray-900"
+                                            value={formData.branchId}
+                                            onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
+                                            required
+                                        >
+                                            <option value="">Select Branch (Required)</option>
+                                            {allBranches.map(branch => (
+                                                <option key={branch.id} value={branch.id}>{branch.name}</option>
+                                            ))}
+                                        </select>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Role will be available only in this branch.
+                                        </p>
+                                    </div>
+                                )}
+
+                                <div className={isSuperUser ? "col-span-2" : ""}>
                                     <label className="block text-sm font-medium text-gray-700">Description</label>
                                     <input
                                         type="text"
@@ -209,3 +330,4 @@ export default function RolesClient({ roles, features, adminRoleName }: { roles:
         </div>
     )
 }
+

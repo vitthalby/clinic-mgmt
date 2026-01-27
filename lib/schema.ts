@@ -118,9 +118,11 @@ export const branches = pgTable("branches", {
 })
 
 // --- ROLES ---
+// Roles can be branch-specific (branchId set) or global/system roles (branchId null, e.g., ADMIN)
 export const roles = pgTable("roles", {
     id: uuid("id").defaultRandom().primaryKey(),
-    name: text("name").notNull().unique(),
+    name: text("name").notNull(),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "cascade" }),
     description: text("description"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
@@ -144,20 +146,25 @@ export const userBranches = pgTable(
     })
 )
 
-// --- ROLES MAPPING (Optional if M:N, but likely 1:N or using roleId in users) ---
-export const userRoles = pgTable(
-    "user_roles",
+// --- USER-BRANCH-ROLE MAPPING ---
+// Maps users to specific roles within specific branches.
+// A user can have one role per branch they are assigned to.
+export const userBranchRoles = pgTable(
+    "user_branch_roles",
     {
         userId: text("user_id")
             .notNull()
             .references(() => users.id, { onDelete: "cascade" }),
+        branchId: uuid("branch_id")
+            .notNull()
+            .references(() => branches.id, { onDelete: "cascade" }),
         roleId: uuid("role_id")
             .notNull()
             .references(() => roles.id, { onDelete: "cascade" }),
         createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     },
     (t) => ({
-        pk: primaryKey({ columns: [t.userId, t.roleId] }),
+        pk: primaryKey({ columns: [t.userId, t.branchId] }),
     })
 )
 

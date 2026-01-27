@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { branches, userBranches } from "@/lib/schema"
+import { branches, userBranchRoles } from "@/lib/schema"
 import { eq, desc, inArray, and } from "drizzle-orm"
 import { auth } from "@/auth"
 import { revalidatePath } from "next/cache"
@@ -29,7 +29,10 @@ export async function getAvailableBranches() {
 
     if (!session.user.id) return []
 
-    const mappings = await db.select().from(userBranches).where(eq(userBranches.userId, session.user.id))
+    // Get branches from userBranchRoles table
+    const mappings = await db.select({ branchId: userBranchRoles.branchId })
+        .from(userBranchRoles)
+        .where(eq(userBranchRoles.userId, session.user.id))
     const branchIds = mappings.map(m => m.branchId)
 
     if (branchIds.length === 0) return []

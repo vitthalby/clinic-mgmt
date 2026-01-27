@@ -1,6 +1,6 @@
 import { db } from "@/lib/db"
-import { features, roleFeaturePermissions, roles, users } from "@/lib/schema"
-import { eq } from "drizzle-orm"
+import { features, roleFeaturePermissions, roles, users, userBranchRoles } from "@/lib/schema"
+import { eq, and } from "drizzle-orm"
 
 export type Permission = {
     canView: boolean;
@@ -11,17 +11,25 @@ export type Permission = {
 
 export type PermissionMap = Record<string, Permission>;
 
-export async function getUserPermissions(userId: string): Promise<PermissionMap> {
+/**
+ * Get permissions for a user.
+ * - For ADMIN users: Returns full permissions for all features
+ * - For non-ADMIN users: Looks up their role for the specified branch and returns role-based permissions
+ * 
+ * @param userId - The user ID
+ * @param branchId - The branch ID (required for non-admin users to get branch-specific role)
+ */
+export async function getUserPermissions(userId: string, branchId?: string): Promise<PermissionMap> {
     const user = await db.query.users.findFirst({
         where: eq(users.id, userId),
         columns: { role: true },
     })
 
-    if (!user || !user.role) return {};
+    if (!user) return {};
 
     const adminRoleName = process.env.ADMIN_ROLE || "ADMIN"
 
-    // Super User / Admin Bypass
+    // Super User / Admin Bypass - full permissions regardless of branch
     if (user.role === adminRoleName) {
         const allFeatures = await db.query.features.findMany();
         const fullPermissions: PermissionMap = {};
@@ -36,13 +44,26 @@ export async function getUserPermissions(userId: string): Promise<PermissionMap>
         return fullPermissions;
     }
 
-    // Get role ID from the role name
-    const roleRecord = await db.query.roles.findFirst({
-        where: eq(roles.name, user.role),
+    // For non-admin users, we need the branchId to get their branch-specific role
+    if (!branchId) {
+        console.warn(`getUserPermissions called for non-admin user ${userId} without branchId`)
+        return {};
+    }
+
+    // Get role from userBranchRoles for this specific branch
+    const userBranchRole = await db.query.userBranchRoles.findFirst({
+        where: and(
+            eq(userBranchRoles.userId, userId),
+            eq(userBranchRoles.branchId, branchId)
+        ),
     })
 
-    if (!roleRecord) return {};
+    if (!userBranchRole) {
+        console.warn(`No role assignment found for user ${userId} in branch ${branchId}`)
+        return {};
+    }
 
+    // Get permissions for the role
     const rawPermissions = await db.select({
         featureKey: features.key,
         canView: roleFeaturePermissions.canView,
@@ -52,7 +73,7 @@ export async function getUserPermissions(userId: string): Promise<PermissionMap>
     })
         .from(roleFeaturePermissions)
         .innerJoin(features, eq(roleFeaturePermissions.featureId, features.id))
-        .where(eq(roleFeaturePermissions.roleId, roleRecord.id))
+        .where(eq(roleFeaturePermissions.roleId, userBranchRole.roleId))
 
     const permissions: PermissionMap = {};
 
@@ -67,3 +88,4 @@ export async function getUserPermissions(userId: string): Promise<PermissionMap>
 
     return permissions;
 }
+

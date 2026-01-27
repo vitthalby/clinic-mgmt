@@ -42,8 +42,9 @@ export default async function ManagementLayout({
 
     // Branch Access Verification for non-SuperUsers
     if (!isSuperUser && dbUser) {
-        const userBranchMappings = await db.query.userBranches.findMany({
-            where: (ub, { eq }) => eq(ub.userId, dbUser.id)
+        // Get branches from userBranchRoles table
+        const userBranchMappings = await db.query.userBranchRoles.findMany({
+            where: (ubr, { eq }) => eq(ubr.userId, dbUser.id)
         })
         const allowedBranchIds = userBranchMappings.map(m => m.branchId)
 
@@ -66,18 +67,39 @@ export default async function ManagementLayout({
         }
     }
 
-    const permissions = dbUser?.id ? await getUserPermissions(dbUser.id) : {};
+    const permissions = dbUser?.id ? await getUserPermissions(dbUser.id, branchId) : {};
 
     const availableBranches = await getAvailableBranches()
 
     let branchName = ""
+    let displayedRole = role
+
     if (isSuperUser) {
         branchName = "Head Office"
-    } else if (branchId) {
+        displayedRole = adminRoleName
+    } else if (branchId && dbUser) {
+        // Fetch specific branch name and user's role in that branch
         const branch = await db.query.branches.findFirst({
-            where: (branches, { eq }) => eq(branches.id, branchId)
+            where: (branches, { eq }) => eq(branches.id, branchId as string)
         })
         branchName = branch?.name || ""
+
+        // Fetch user's role for this branch
+        const userBranchMapping = await db.query.userBranchRoles.findFirst({
+            where: (ubr, { eq, and }) => and(
+                eq(ubr.userId, dbUser.id),
+                eq(ubr.branchId, branchId as string)
+            )
+        })
+
+        if (userBranchMapping) {
+            const userRole = await db.query.roles.findFirst({
+                where: (r, { eq }) => eq(r.id, userBranchMapping.roleId)
+            })
+            if (userRole) {
+                displayedRole = userRole.name
+            }
+        }
     }
 
 
@@ -95,7 +117,7 @@ export default async function ManagementLayout({
                         <Topbar
                             branchName={branchName}
                             currentBranchId={branchId}
-                            role={role}
+                            role={displayedRole}
                             availableBranches={availableBranches}
                             isSuperUser={isSuperUser}
                         />

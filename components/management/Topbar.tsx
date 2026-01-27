@@ -24,8 +24,9 @@ export default function Topbar({ branchName, currentBranchId, role, availableBra
         if (id === currentBranchId) return
         await selectBranch(id)
         setIsBranchOpen(false)
-        router.refresh()
+        window.location.reload()
     }
+
 
     // Close dropdown on click outside
     useEffect(() => {
