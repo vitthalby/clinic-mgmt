@@ -53,6 +53,13 @@ export async function createUser(data: any) {
     const session = await auth()
     if (!session?.user) throw new Error("Unauthorized");
 
+    const adminRoleName = process.env.ADMIN_ROLE || "ADMIN"
+
+    // Validation: Non-ADMIN users MUST have at least one branch
+    if (data.roleName !== adminRoleName && (!data.branchIds || data.branchIds.length === 0)) {
+        throw new Error("Please select at least one branch for this user.")
+    }
+
     // Check email
     const existing = await db.query.users.findFirst({ where: eq(users.email, data.email) })
     if (existing) throw new Error("User with this email already exists")
@@ -69,7 +76,7 @@ export async function createUser(data: any) {
     }).returning()
 
     // Assign Branches if not Admin
-    if (data.roleName !== 'ADMIN' && data.branchIds && data.branchIds.length > 0) {
+    if (data.roleName !== adminRoleName && data.branchIds && data.branchIds.length > 0) {
         await db.insert(userBranches).values(
             data.branchIds.map((bid: string) => ({ userId: newUser.id, branchId: bid }))
         )
@@ -81,6 +88,13 @@ export async function createUser(data: any) {
 export async function updateUser(id: string, data: any) {
     const session = await auth()
     if (!session?.user) throw new Error("Unauthorized");
+
+    const adminRoleName = process.env.ADMIN_ROLE || "ADMIN"
+
+    // Validation: Non-ADMIN users MUST have at least one branch
+    if (data.roleName !== adminRoleName && (!data.branchIds || data.branchIds.length === 0)) {
+        throw new Error("Please select at least one branch for this user.")
+    }
 
     await db.update(users).set({
         firstName: data.firstName,
@@ -95,7 +109,7 @@ export async function updateUser(id: string, data: any) {
     await db.transaction(async (tx) => {
         await tx.delete(userBranches).where(eq(userBranches.userId, id));
         // Only if not admin
-        if (data.roleName !== 'ADMIN' && data.branchIds && data.branchIds.length > 0) {
+        if (data.roleName !== adminRoleName && data.branchIds && data.branchIds.length > 0) {
             await tx.insert(userBranches).values(
                 data.branchIds.map((bid: string) => ({ userId: id, branchId: bid }))
             );

@@ -16,12 +16,13 @@ export default async function SelectBranchPage() {
         where: eq(users.email, session.user.email)
     })
 
+    const adminRoleName = process.env.ADMIN_ROLE || "ADMIN"
     const role = dbUser?.role || session.user.role
     const branches = await getAvailableBranches()
 
-    // Auto-select if only 1 branch and not admin
-    if (role === 'ADMIN') {
-        redirect("/management")
+    // Auto-select if admin, go to dashboard
+    if (role === adminRoleName) {
+        redirect("/")
     }
 
     if (branches.length === 1) {
@@ -50,7 +51,7 @@ export default async function SelectBranchPage() {
                             ? "Choose a location to manage your clinic workflow"
                             : "Welcome to the management portal"}
                     </p>
-                    {role === 'ADMIN' && (
+                    {role === adminRoleName && (
                         <div className="mt-4 inline-flex items-center px-3 py-1 rounded-full bg-orange/10 border border-orange/20 text-orange-light text-sm font-medium">
                             <ShieldCheck size={14} className="mr-2" />
                             Admin Account Verified
@@ -60,7 +61,7 @@ export default async function SelectBranchPage() {
 
                 {branches.length === 0 ? (
                     <div className="glass-panel p-10 rounded-3xl text-center max-w-md mx-auto">
-                        {role === 'ADMIN' ? (
+                        {role === adminRoleName ? (
                             <>
                                 <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-6">
                                     <Building2 className="text-orange" size={32} />
@@ -70,7 +71,7 @@ export default async function SelectBranchPage() {
                                     You haven't set up any branches for your clinic yet. Start by accessing the dashboard.
                                 </p>
                                 <a
-                                    href="/management"
+                                    href="/"
                                     className="btn-primary inline-flex items-center text-white"
                                 >
                                     Go to Dashboard <ArrowRight size={18} className="ml-2" />
@@ -97,7 +98,7 @@ export default async function SelectBranchPage() {
                             <form key={branch.id} action={async () => {
                                 "use server"
                                 await selectBranch(branch.id)
-                                redirect("/management")
+                                redirect("/")
                             }}>
                                 <button type="submit" className="glass-card w-full text-left p-8 rounded-3xl group relative overflow-hidden">
                                     <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">

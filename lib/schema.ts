@@ -160,3 +160,36 @@ export const userRoles = pgTable(
         pk: primaryKey({ columns: [t.userId, t.roleId] }),
     })
 )
+
+// --- FEATURES ---
+export const features = pgTable("features", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull().unique(), // e.g. "Appointments"
+    key: text("key").notNull().unique(), // e.g. "appointments"
+    description: text("description"),
+    // Defines which actions are valid for this feature. E.g. ["view", "edit"]
+    availableActions: jsonb("available_actions").$type<string[]>().default(["view", "add", "edit", "delete"]),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+})
+
+// --- ROLE-FEATURE PERMISSIONS ---
+export const roleFeaturePermissions = pgTable(
+    "role_feature_permissions",
+    {
+        roleId: uuid("role_id")
+            .notNull()
+            .references(() => roles.id, { onDelete: "cascade" }),
+        featureId: uuid("feature_id")
+            .notNull()
+            .references(() => features.id, { onDelete: "cascade" }),
+        canView: boolean("can_view").default(false),
+        canAdd: boolean("can_add").default(false),
+        canEdit: boolean("can_edit").default(false),
+        canDelete: boolean("can_delete").default(false),
+        createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+        updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+    },
+    (t) => ({
+        pk: primaryKey({ columns: [t.roleId, t.featureId] }),
+    })
+)

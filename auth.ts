@@ -7,7 +7,11 @@ import { users } from "@/lib/schema"
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
     adapter: DrizzleAdapter(db),
-    providers: [Google],
+    providers: [
+        Google({
+            allowDangerousEmailAccountLinking: true,
+        }),
+    ],
     callbacks: {
         async signIn({ user, account, profile }) {
             if (!user.email) return false
@@ -19,9 +23,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
             // If user exists
             if (existingUser) {
+                const adminRoleName = process.env.ADMIN_ROLE || "ADMIN"
                 // Critical Fix: If it's the main admin and somehow lost role or has no role, fix it.
-                if (user.email === "vitthalby@gmail.com" && existingUser.role !== "ADMIN") {
-                    await db.update(users).set({ role: "ADMIN" }).where(eq(users.email, user.email))
+                if (user.email === "vitthalby@gmail.com" && existingUser.role !== adminRoleName) {
+                    await db.update(users).set({ role: adminRoleName }).where(eq(users.email, user.email))
                 }
                 return true
             }

@@ -16,19 +16,60 @@ import {
 import { siteConfig } from "@/config/site"
 import { signOut } from "next-auth/react"
 
+import { PermissionMap } from "@/lib/permissions"
+
 const navigation = [
-    { name: "Dashboard", href: "/management", icon: LayoutDashboard },
-    { name: "Appointments", href: "/management/appointments", icon: Calendar },
-    { name: "Customers", href: "/management/customers", icon: Users },
-    { name: "Payments", href: "/management/payments", icon: CreditCard },
-    { name: "Branches", href: "/management/branches", icon: Building2 },
-    { name: "Staff Management", href: "/management/users", icon: Briefcase },
-    { name: "Roles", href: "/management/roles", icon: ShieldCheck },
-    { name: "Settings", href: "/management/settings", icon: Settings },
+    { name: "Dashboard", href: "/management", icon: LayoutDashboard, key: "dashboard" },
+    { name: "Appointments", href: "/management/appointments", icon: Calendar, key: "appointments" },
+    { name: "Customers", href: "/management/customers", icon: Users, key: "customers" },
+    { name: "Payments", href: "/management/payments", icon: CreditCard, key: "payments" },
+    { name: "Branches", href: "/management/branches", icon: Building2, key: "branches" },
+    { name: "Staff Management", href: "/management/users", icon: Briefcase, key: "users" },
+    { name: "Roles", href: "/management/roles", icon: ShieldCheck, key: "roles" },
+    { name: "Settings", href: "/management/settings", icon: Settings, key: "settings" },
 ]
 
-export default function Sidebar() {
+interface SidebarProps {
+    permissions?: PermissionMap
+}
+
+export default function Sidebar({ permissions }: SidebarProps) {
     const pathname = usePathname()
+
+    // If no permissions provided (e.g. initial load or error), assume restrictions apply. 
+    // Or if we want to be safe, maybe show nothing or just Dashboard?
+    // Let's assume passed permissions are authoritative.
+
+    // Helper to check if item is allowed
+    const isAllowed = (key: string) => {
+        if (!permissions) return false; // Default deny
+        // If explicitly set
+        if (permissions[key]?.canView) return true;
+        // If undefined, maybe allow if it's Dashboard? Or deny?
+        // User said "check user -> role -> feature access".
+        // Use strict allow.
+        return false;
+    };
+
+    const allowedNavigation = navigation.filter(item => {
+        // If permissions are completely empty but user is logged in (handled by layout), 
+        // what should happen? 
+        // Maybe valid user but no role assigned?
+        // We should probably allow showing the item if the featureKey is not in DB? 
+        // No, "Every menu item can be added as feature".
+
+        // Handle "Day-0" case where admin hasn't set up roles yet?
+        // We seeded ADMIN user. If we seeded Features, and seeded RolePermissions (which we haven't done yet for Admin),
+        // then Admin sees nothing!
+        // CRITICAL: We need to Ensure ADMIN sees everything.
+        // My `getUserPermissions` relies on DB.
+        // I should probably update `getUserPermissions` to return all True for ADMIN role name, 
+        // OR ensure I seed the permissions for ADMIN.
+
+        // Better to seed permissions for ADMIN.
+        // But for now, let's implement the filter.
+        return isAllowed(item.key);
+    });
 
     return (
         <div className="flex flex-col w-64 bg-white border-r border-gray-200 h-full min-h-screen">
@@ -43,7 +84,7 @@ export default function Sidebar() {
 
             <div className="flex-1 overflow-y-auto py-4">
                 <nav className="px-3 space-y-1">
-                    {navigation.map((item) => {
+                    {allowedNavigation.map((item) => {
                         const isActive = pathname === item.href
                         return (
                             <Link

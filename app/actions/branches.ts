@@ -18,8 +18,10 @@ export async function getAvailableBranches() {
         return []
     }
 
+    const adminRoleName = process.env.ADMIN_ROLE || "ADMIN"
+
     // Role check logic. 
-    if (session.user.role === 'ADMIN') {
+    if (session.user.role === adminRoleName) {
         return db.query.branches.findMany({
             orderBy: [desc(branches.createdAt)],
         })

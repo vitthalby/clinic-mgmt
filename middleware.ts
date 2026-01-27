@@ -22,15 +22,24 @@ export default async function middleware(req: NextRequest) {
     // For local development, you might map 'app.localhost' in hosts file
     const isManagementSubdomain = hostname.startsWith("app.");
 
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-url", req.url);
+
     if (isManagementSubdomain) {
         // Rewrite requests to the /management internal path
-        // preserves the URL in the browser but serves content from app/(management)/management
-        return NextResponse.rewrite(new URL(`/management${url.pathname === "/" ? "" : url.pathname}`, req.url));
+        return NextResponse.rewrite(
+            new URL(`/management${url.pathname === "/" ? "" : url.pathname}`, req.url),
+            {
+                request: {
+                    headers: requestHeaders,
+                },
+            }
+        );
     }
 
-    // For the main site, we don't need to rewrite if (site) is at root, 
-    // but if we had strict path separation we might needed to rewrite to /(site).
-    // Since 'page.tsx' in (site) maps to /, we typically do nothing here.
-
-    return NextResponse.next();
+    return NextResponse.next({
+        request: {
+            headers: requestHeaders,
+        },
+    });
 }

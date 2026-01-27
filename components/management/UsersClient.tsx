@@ -33,9 +33,21 @@ type Role = {
     description: string | null
 }
 
-export default function UsersClient({ users, allBranches, allRoles }: { users: User[], allBranches: Branch[], allRoles: Role[] }) {
+export default function UsersClient({
+    users,
+    allBranches,
+    allRoles,
+    adminRoleName
+}: {
+    users: User[],
+    allBranches: Branch[],
+    allRoles: Role[],
+    adminRoleName: string
+}) {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingUser, setEditingUser] = useState<User | null>(null)
+    const [isSubmitting, setIsSubmitting] = useState(false)
+    const [error, setError] = useState<string | null>(null)
 
     // Form State
     const [formData, setFormData] = useState({
@@ -58,6 +70,7 @@ export default function UsersClient({ users, allBranches, allRoles }: { users: U
             roleName: "STAFF",
             branchIds: []
         })
+        setError(null)
     }
 
     const openCreate = () => {
@@ -78,10 +91,20 @@ export default function UsersClient({ users, allBranches, allRoles }: { users: U
             branchIds: user.branches.map(b => b.id)
         })
         setIsModalOpen(true)
+        setError(null)
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+        setError(null)
+
+        // Validation: Branch is mandatory for non-Admin
+        if (formData.roleName !== adminRoleName && formData.branchIds.length === 0) {
+            setError("Please select at least one branch for this user.")
+            return
+        }
+
+        setIsSubmitting(true)
         try {
             if (editingUser) {
                 await updateUser(editingUser.id, formData)
@@ -91,9 +114,11 @@ export default function UsersClient({ users, allBranches, allRoles }: { users: U
             setIsModalOpen(false)
             setEditingUser(null)
             resetForm()
-        } catch (error) {
+        } catch (error: any) {
             console.error(error)
-            alert("Failed to save user")
+            setError(error.message || "Failed to save user")
+        } finally {
+            setIsSubmitting(false)
         }
     }
 
@@ -116,15 +141,12 @@ export default function UsersClient({ users, allBranches, allRoles }: { users: U
         }
     }
 
-    const isAdminSelected = formData.roleName === 'ADMIN'
+    const isAdminSelected = formData.roleName === adminRoleName
 
     const availableRoles = useMemo(() => {
-        // Ensure standard roles exist if DB is empty or just use DB roles
-        // We expect DB to have roles, but if "Legacy" strings are used, we might need to handle manual entry or mapping.
-        // If allRoles is empty, fallback to hardcoded
-        if (allRoles.length === 0) return [{ id: 'admin', name: 'ADMIN' }, { id: 'staff', name: 'STAFF' }]
+        if (allRoles.length === 0) return [{ id: 'admin', name: adminRoleName }, { id: 'staff', name: 'STAFF' }]
         return allRoles
-    }, [allRoles])
+    }, [allRoles, adminRoleName])
 
     return (
         <div>
@@ -175,12 +197,12 @@ export default function UsersClient({ users, allBranches, allRoles }: { users: U
                                     <div className="text-sm text-gray-500">{user.mobile || '-'}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.role === 'ADMIN' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'}`}>
+                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.role === adminRoleName ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'}`}>
                                         {user.role}
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {user.role === 'ADMIN' ? (
+                                    {user.role === adminRoleName ? (
                                         <span className="text-gray-400 italic">All Branches (Admin)</span>
                                     ) : user.branches.length > 0 ? (
                                         <div className="flex flex-wrap gap-1">
@@ -191,7 +213,7 @@ export default function UsersClient({ users, allBranches, allRoles }: { users: U
                                             ))}
                                         </div>
                                     ) : (
-                                        <span className="text-red-400 italic">No Branch</span>
+                                        <span className="text-red-500 font-medium italic">Required Branch Assignment!</span>
                                     )}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -273,7 +295,15 @@ export default function UsersClient({ users, allBranches, allRoles }: { users: U
                                 <select
                                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                     value={formData.roleName}
-                                    onChange={(e) => setFormData({ ...formData, roleName: e.target.value })}
+                                    onChange={(e) => {
+                                        const newRole = e.target.value
+                                        setFormData({
+                                            ...formData,
+                                            roleName: newRole,
+                                            // Optional: If switching to Admin, we could keep branches or clear them.
+                                            // The backend ignores them for Admin anyway.
+                                        })
+                                    }}
                                 >
                                     {availableRoles.map(role => (
                                         <option key={role.id} value={role.name}>{role.name}</option>
@@ -286,8 +316,12 @@ export default function UsersClient({ users, allBranches, allRoles }: { users: U
 
                             {/* Branch Selection */}
                             <div className={`transition-opacity ${isAdminSelected ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Assign Branches {isAdminSelected && '(Not required for Admin)'}</label>
-                                <div className="border rounded-md p-3 max-h-40 overflow-y-auto bg-gray-50">
+                                <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+                                    Assign Branches
+                                    {!isAdminSelected && <span className="ml-1 text-red-500 text-xs font-bold">*Required</span>}
+                                    {isAdminSelected && <span className="ml-1 text-gray-400 text-xs">(Not required for Admin)</span>}
+                                </label>
+                                <div className={`border rounded-md p-3 max-h-40 overflow-y-auto bg-gray-50 ${!isAdminSelected && formData.branchIds.length === 0 ? 'border-red-200 ring-1 ring-red-100' : ''}`}>
                                     {allBranches.map(branch => (
                                         <div key={branch.id} className="flex items-center mb-2">
                                             <input
@@ -304,21 +338,39 @@ export default function UsersClient({ users, allBranches, allRoles }: { users: U
                                     ))}
                                     {allBranches.length === 0 && <p className="text-gray-500 italic">No branches available.</p>}
                                 </div>
+                                {!isAdminSelected && formData.branchIds.length === 0 && (
+                                    <p className="text-xs text-red-500 mt-1">Non-admin staff must be assigned to at least one branch.</p>
+                                )}
                             </div>
 
-                            <div className="flex justify-end gap-3 mt-6">
+                            {error && (
+                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative text-sm" role="alert">
+                                    {error}
+                                </div>
+                            )}
+
+                            <div className="flex justify-end gap-3 mt-6 border-t pt-4">
                                 <button
                                     type="button"
                                     onClick={() => setIsModalOpen(false)}
                                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                                    disabled={isSubmitting}
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+                                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 flex items-center gap-2 disabled:bg-indigo-400"
+                                    disabled={isSubmitting}
                                 >
-                                    {editingUser ? "Save Changes" : "Create User"}
+                                    {isSubmitting ? (
+                                        <>
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        editingUser ? "Save Changes" : "Create User"
+                                    )}
                                 </button>
                             </div>
                         </form>
