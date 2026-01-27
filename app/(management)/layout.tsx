@@ -32,14 +32,16 @@ export default async function ManagementLayout({
 
     const adminRoleName = process.env.ADMIN_ROLE || "ADMIN"
     const role = dbUser?.role || session.user.role
-    let branchId = cookies().get('clinic-branch-id')?.value
+    const isSuperUser = role === adminRoleName
+
+    let branchId = isSuperUser ? 'head-office' : cookies().get('clinic-branch-id')?.value
 
     // Determine current path to avoid infinite redirect loop
     const xUrl = headers().get('x-url') || ""
     const isSelectBranchPage = xUrl.includes('/select-branch')
 
-    // Branch Access Verification for non-ADMIN users
-    if (role !== adminRoleName && dbUser) {
+    // Branch Access Verification for non-SuperUsers
+    if (!isSuperUser && dbUser) {
         const userBranchMappings = await db.query.userBranches.findMany({
             where: (ub, { eq }) => eq(ub.userId, dbUser.id)
         })
@@ -55,9 +57,13 @@ export default async function ManagementLayout({
         if (!branchId && !isSelectBranchPage) {
             redirect('/select-branch')
         }
-    } else if (!branchId && role === adminRoleName && !isSelectBranchPage) {
-        // Optional: Even admins should pick a branch context if they want to see branch-specific data?
-        // But for now, user said "only allow ADMIN users to proceed" without branch.
+    } else if (isSuperUser && branchId && branchId !== 'head-office') {
+        const branchExist = await db.query.branches.findFirst({
+            where: (branches, { eq }) => eq(branches.id, branchId as string)
+        })
+        if (!branchExist) {
+            branchId = undefined
+        }
     }
 
     const permissions = dbUser?.id ? await getUserPermissions(dbUser.id) : {};
@@ -65,12 +71,15 @@ export default async function ManagementLayout({
     const availableBranches = await getAvailableBranches()
 
     let branchName = ""
-    if (branchId) {
+    if (isSuperUser) {
+        branchName = "Head Office"
+    } else if (branchId) {
         const branch = await db.query.branches.findFirst({
             where: (branches, { eq }) => eq(branches.id, branchId)
         })
         branchName = branch?.name || ""
     }
+
 
     return (
         <AuthProvider>
@@ -88,6 +97,7 @@ export default async function ManagementLayout({
                             currentBranchId={branchId}
                             role={role}
                             availableBranches={availableBranches}
+                            isSuperUser={isSuperUser}
                         />
                         <main className="flex-1 py-6 px-4 sm:px-6 lg:px-8">
                             {children}

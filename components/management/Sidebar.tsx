@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -74,11 +75,23 @@ export default function Sidebar({ permissions }: SidebarProps) {
     return (
         <div className="flex flex-col w-64 bg-white border-r border-gray-200 h-full min-h-screen">
             <div className="flex items-center px-6 h-16 border-b border-gray-200">
-                <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center font-bold text-white">
-                        {siteConfig.name.charAt(0)}
+                <div className="flex items-center gap-3">
+                    <div className="relative w-10 h-10 flex-shrink-0">
+                        <Image
+                            src={siteConfig.logo}
+                            alt={siteConfig.name}
+                            fill
+                            className="object-contain rounded-lg"
+                        />
                     </div>
-                    <span className="text-lg font-semibold text-gray-900">{siteConfig.name}</span>
+                    <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-bold text-gray-900 truncate leading-tight">
+                            {siteConfig.name}
+                        </span>
+                        <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-widest truncate">
+                            {siteConfig.category}
+                        </span>
+                    </div>
                 </div>
             </div>
 
