@@ -8,13 +8,11 @@ export default function SiteLayout({
     children: React.ReactNode
 }) {
     return (
-        <>
+        <div className="bg-surface text-white">
             <Navbar />
-            <main className="min-h-screen">
-                {children}
-            </main>
+            {children}
             <Footer />
             <FloatingContact />
-        </>
+        </div>
     )
 }

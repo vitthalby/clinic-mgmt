@@ -1,8 +1,11 @@
-import { getBranches } from "@/app/actions/branches"
+import { getBranchesWithFeatures, getAllFeatures } from "@/app/actions/branches"
 import BranchesClient from "@/components/management/BranchesClient"
 
 export default async function BranchesPage() {
-    const branches = await getBranches()
+    const [branches, allFeatures] = await Promise.all([
+        getBranchesWithFeatures(),
+        getAllFeatures(),
+    ])
 
-    return <BranchesClient branches={branches} />
+    return <BranchesClient branches={branches} allFeatures={allFeatures} />
 }

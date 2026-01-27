@@ -1,4 +1,5 @@
 import { getFeatures, getRoles, getAllBranches } from "@/app/actions/roles"
+import { getEnabledFeaturesForBranch } from "@/app/actions/branches"
 import RolesClient from "@/components/management/RolesClient"
 import { auth } from "@/auth"
 import { cookies } from "next/headers"
@@ -40,8 +41,17 @@ export default async function RolesPage() {
     }
 
     const roles = await getRoles(branchId, isSuperUser)
-    const features = await getFeatures()
     const allBranches = isSuperUser ? await getAllBranches() : []
+    
+    // Get features based on context:
+    // - Super users see all features
+    // - Branch users only see features enabled for their branch
+    let features: { id: string; name: string; key: string; description: string | null; availableActions: string[] | null }[] = []
+    if (isSuperUser) {
+        features = await getFeatures()
+    } else if (branchId) {
+        features = await getEnabledFeaturesForBranch(branchId)
+    }
 
     return (
         <RolesClient

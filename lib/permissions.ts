@@ -1,6 +1,6 @@
 import { db } from "@/lib/db"
-import { features, roleFeaturePermissions, roles, users, userBranchRoles } from "@/lib/schema"
-import { eq, and } from "drizzle-orm"
+import { features, roleFeaturePermissions, roles, users, userBranchRoles, branchFeatures } from "@/lib/schema"
+import { eq, and, inArray } from "drizzle-orm"
 
 export type Permission = {
     canView: boolean;
@@ -63,7 +63,25 @@ export async function getUserPermissions(userId: string, branchId?: string): Pro
         return {};
     }
 
-    // Get permissions for the role
+    // Get enabled features for this branch first
+    const enabledBranchFeatures = await db
+        .select({ featureId: branchFeatures.featureId })
+        .from(branchFeatures)
+        .where(
+            and(
+                eq(branchFeatures.branchId, branchId),
+                eq(branchFeatures.isEnabled, true)
+            )
+        )
+
+    const enabledFeatureIds = enabledBranchFeatures.map(f => f.featureId)
+
+    // If no features are enabled for this branch, return empty permissions
+    if (enabledFeatureIds.length === 0) {
+        return {};
+    }
+
+    // Get permissions for the role, filtered by branch-enabled features
     const rawPermissions = await db.select({
         featureKey: features.key,
         canView: roleFeaturePermissions.canView,
@@ -73,7 +91,12 @@ export async function getUserPermissions(userId: string, branchId?: string): Pro
     })
         .from(roleFeaturePermissions)
         .innerJoin(features, eq(roleFeaturePermissions.featureId, features.id))
-        .where(eq(roleFeaturePermissions.roleId, userBranchRole.roleId))
+        .where(
+            and(
+                eq(roleFeaturePermissions.roleId, userBranchRole.roleId),
+                inArray(roleFeaturePermissions.featureId, enabledFeatureIds)
+            )
+        )
 
     const permissions: PermissionMap = {};
 

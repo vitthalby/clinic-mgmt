@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { createRole, updateRole, deleteRole, getRolePermissions, getRoles } from "@/app/actions/roles"
-import { Plus, Edit2, Trash2, Building } from "lucide-react"
+import { getEnabledFeaturesForBranch } from "@/app/actions/branches"
+import { Plus, Edit2, Trash2, Building, AlertCircle } from "lucide-react"
 import { useFeaturePermissions } from "@/components/providers/PermissionsProvider"
 import PermissionsMatrix, { Feature, Permission } from "@/components/management/PermissionsMatrix"
 
@@ -31,7 +32,7 @@ interface RolesClientProps {
 
 export default function RolesClient({
     roles: initialRoles,
-    features,
+    features: initialFeatures,
     adminRoleName,
     isSuperUser,
     currentBranchId,
@@ -45,9 +46,36 @@ export default function RolesClient({
     const [formData, setFormData] = useState({ name: "", description: "", branchId: "" })
     const [permissions, setPermissions] = useState<Permission[]>([])
     const [filterBranchId, setFilterBranchId] = useState<string>(currentBranchId || "")
+    
+    // Branch-specific features for the modal
+    const [modalFeatures, setModalFeatures] = useState<Feature[]>(initialFeatures)
+    const [loadingFeatures, setLoadingFeatures] = useState(false)
 
     // Create a branch lookup map
     const branchMap = new Map(allBranches.map(b => [b.id, b.name]))
+
+    // Load branch-specific features when branch selection changes in modal
+    const loadBranchFeatures = async (branchId: string) => {
+        if (!branchId) {
+            setModalFeatures([])
+            return
+        }
+        
+        setLoadingFeatures(true)
+        try {
+            const branchFeatures = await getEnabledFeaturesForBranch(branchId)
+            setModalFeatures(branchFeatures)
+            
+            // Filter existing permissions to only include features enabled for this branch
+            const enabledFeatureIds = new Set(branchFeatures.map(f => f.id))
+            setPermissions(prev => prev.filter(p => enabledFeatureIds.has(p.featureId)))
+        } catch (error) {
+            console.error("Failed to load branch features:", error)
+            setModalFeatures([])
+        } finally {
+            setLoadingFeatures(false)
+        }
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -101,15 +129,39 @@ export default function RolesClient({
             branchId: role.branchId || ""
         })
 
+        // Load branch-specific features first
+        const branchId = role.branchId || currentBranchId || ""
+        let enabledFeatureIds: Set<string> = new Set()
+        
+        if (branchId) {
+            setLoadingFeatures(true)
+            try {
+                const branchFeatures = await getEnabledFeaturesForBranch(branchId)
+                setModalFeatures(branchFeatures)
+                enabledFeatureIds = new Set(branchFeatures.map(f => f.id))
+            } catch (error) {
+                console.error("Failed to load branch features:", error)
+                setModalFeatures([])
+            } finally {
+                setLoadingFeatures(false)
+            }
+        } else {
+            setModalFeatures(initialFeatures)
+            enabledFeatureIds = new Set(initialFeatures.map(f => f.id))
+        }
+
+        // Load role permissions and filter by branch-enabled features
         try {
             const rolePerms = await getRolePermissions(role.id)
-            const sanitized: Permission[] = rolePerms.map(p => ({
-                featureId: p.featureId,
-                canView: p.canView ?? false,
-                canAdd: p.canAdd ?? false,
-                canEdit: p.canEdit ?? false,
-                canDelete: p.canDelete ?? false,
-            }))
+            const sanitized: Permission[] = rolePerms
+                .filter(p => enabledFeatureIds.has(p.featureId)) // Only include permissions for enabled features
+                .map(p => ({
+                    featureId: p.featureId,
+                    canView: p.canView ?? false,
+                    canAdd: p.canAdd ?? false,
+                    canEdit: p.canEdit ?? false,
+                    canDelete: p.canDelete ?? false,
+                }))
             setPermissions(sanitized)
         } catch (e) {
             console.error("Failed to load permissions", e)
@@ -119,11 +171,26 @@ export default function RolesClient({
         setIsModalOpen(true)
     }
 
-    const openCreate = () => {
+    const openCreate = async () => {
         setEditingRole(null)
-        setFormData({ name: "", description: "", branchId: currentBranchId || "" })
+        const branchId = currentBranchId || ""
+        setFormData({ name: "", description: "", branchId })
         setPermissions([])
+        
+        // Load branch-specific features for the default branch
+        if (branchId) {
+            await loadBranchFeatures(branchId)
+        } else {
+            setModalFeatures([])
+        }
+        
         setIsModalOpen(true)
+    }
+    
+    // Handle branch change in the modal form
+    const handleBranchChange = async (branchId: string) => {
+        setFormData(prev => ({ ...prev, branchId }))
+        await loadBranchFeatures(branchId)
     }
 
     const handleBranchFilterChange = async (branchId: string) => {
@@ -272,8 +339,9 @@ export default function RolesClient({
                                         <select
                                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 text-gray-900"
                                             value={formData.branchId}
-                                            onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
+                                            onChange={(e) => handleBranchChange(e.target.value)}
                                             required
+                                            disabled={!!editingRole}
                                         >
                                             <option value="">Select Branch (Required)</option>
                                             {allBranches.map(branch => (
@@ -281,7 +349,9 @@ export default function RolesClient({
                                             ))}
                                         </select>
                                         <p className="text-xs text-gray-500 mt-1">
-                                            Role will be available only in this branch.
+                                            {editingRole 
+                                                ? "Branch cannot be changed after role creation."
+                                                : "Role will be available only in this branch. Features shown below are based on branch enablement."}
                                         </p>
                                     </div>
                                 )}
@@ -298,14 +368,32 @@ export default function RolesClient({
                             </div>
 
                             <div className="border-t pt-4">
-                                <h3 className="text-lg font-medium text-gray-900 mb-2">Feature Access</h3>
-                                <div className="max-h-[60vh] overflow-y-auto">
-                                    <PermissionsMatrix
-                                        features={features}
-                                        value={permissions}
-                                        onChange={setPermissions}
-                                    />
+                                <div className="flex items-center justify-between mb-2">
+                                    <h3 className="text-lg font-medium text-gray-900">Feature Access</h3>
+                                    {loadingFeatures && (
+                                        <span className="text-sm text-gray-500">Loading features...</span>
+                                    )}
                                 </div>
+                                
+                                {!formData.branchId && isSuperUser ? (
+                                    <div className="flex items-center gap-2 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
+                                        <AlertCircle size={20} />
+                                        <span className="text-sm">Please select a branch first to see available features.</span>
+                                    </div>
+                                ) : modalFeatures.length === 0 && !loadingFeatures ? (
+                                    <div className="flex items-center gap-2 p-4 bg-gray-50 border border-gray-200 rounded-lg text-gray-600">
+                                        <AlertCircle size={20} />
+                                        <span className="text-sm">No features are enabled for this branch. Please enable features in Branch settings first.</span>
+                                    </div>
+                                ) : (
+                                    <div className="max-h-[60vh] overflow-y-auto">
+                                        <PermissionsMatrix
+                                            features={modalFeatures}
+                                            value={permissions}
+                                            onChange={setPermissions}
+                                        />
+                                    </div>
+                                )}
                             </div>
 
                             <div className="flex justify-end gap-3 mt-6">

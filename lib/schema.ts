@@ -179,6 +179,26 @@ export const features = pgTable("features", {
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 })
 
+// --- BRANCH-FEATURE ENABLEMENT ---
+// Controls which features are enabled for each branch
+export const branchFeatures = pgTable(
+    "branch_features",
+    {
+        branchId: uuid("branch_id")
+            .notNull()
+            .references(() => branches.id, { onDelete: "cascade" }),
+        featureId: uuid("feature_id")
+            .notNull()
+            .references(() => features.id, { onDelete: "cascade" }),
+        isEnabled: boolean("is_enabled").default(true),
+        createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+        updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+    },
+    (t) => ({
+        pk: primaryKey({ columns: [t.branchId, t.featureId] }),
+    })
+)
+
 // --- ROLE-FEATURE PERMISSIONS ---
 export const roleFeaturePermissions = pgTable(
     "role_feature_permissions",

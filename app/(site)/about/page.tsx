@@ -15,7 +15,7 @@ import { linkConfig } from '@/config/links'
 
 export default function AboutPage() {
     return (
-        <main className="min-h-screen bg-surface-dark pt-24 pb-12">
+        <main className="min-h-screen bg-surface pt-24 pb-12">
 
             {/* Section 1: Overview */}
             <section className="container mx-auto px-4 mb-24">
