@@ -32,7 +32,7 @@ export default async function CustomersPage() {
     const { customers, total } = await getCustomers({
         branchId: isSuperUser ? undefined : currentBranchId,
         page: 1,
-        limit: 20,
+        limit: 10,
     })
 
     // Fetch branches for the dropdown

@@ -126,7 +126,7 @@ export default function CustomersClient({
         isActive: true,
     })
 
-    const limit = 20
+    const limit = 10
     const totalPages = Math.ceil(total / limit)
 
     // Fetch customers
@@ -365,7 +365,12 @@ export default function CustomersClient({
         <div>
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-                <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
+                <div className="flex items-center gap-3">
+                    <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-indigo-100 text-indigo-800">
+                        {total} total
+                    </span>
+                </div>
                 <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                     {/* Search */}
                     <div className="relative flex-1 sm:flex-none">
@@ -397,21 +402,6 @@ export default function CustomersClient({
                             Add Customer
                         </button>
                     )}
-                </div>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-indigo-100 rounded-lg">
-                            <User className="h-5 w-5 text-indigo-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-500">Total Customers</p>
-                            <p className="text-xl font-bold text-gray-900">{total}</p>
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -461,18 +451,12 @@ export default function CustomersClient({
                                         onExpand={() => loadExpandedData(customer.id)}
                                         isLoading={loadingDetails[customer.id]}
                                         columns={[
-                                            <div className="flex items-center">
-                                                <div className="h-10 w-10 flex-shrink-0 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-                                                    {customer.firstName[0]}
-                                                    {customer.lastName[0]}
+                                            <div>
+                                                <div className="text-sm font-medium text-gray-900">
+                                                    {customer.firstName} {customer.lastName}
                                                 </div>
-                                                <div className="ml-4">
-                                                    <div className="text-sm font-medium text-gray-900">
-                                                        {customer.firstName} {customer.lastName}
-                                                    </div>
-                                                    <div className="text-xs text-gray-500">
-                                                        {customer.gender || "—"}
-                                                    </div>
+                                                <div className="text-xs text-gray-500">
+                                                    {customer.gender || "—"}
                                                 </div>
                                             </div>,
                                             <div>
