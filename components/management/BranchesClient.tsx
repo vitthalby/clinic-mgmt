@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createBranch, updateBranch, getBranchFeatures } from "@/app/actions/branches"
-import { Plus, Edit2, CheckCircle, XCircle, Settings } from "lucide-react"
+import { createBranch, updateBranch, deleteBranch, getBranchFeatures, getBranchDetails, getBranchesMinimal } from "@/app/actions/branches"
+import { Plus, Edit2, Trash2, CheckCircle, XCircle } from "lucide-react"
 import { useActionState } from "@/hooks/useActionState"
-import { ActionError } from "@/components/ui"
+import { useExpandableTable } from "@/hooks/useExpandableTable"
+import { ActionError, ExpandableTableRow, ExpandedDetailRow, ExpandedDetailSection } from "@/components/ui"
+import type { AuditDisplayInfo } from "@/types/audit"
 
 type Feature = {
     id: string
@@ -13,17 +15,28 @@ type Feature = {
     description: string | null
 }
 
-type Branch = {
+type BranchMinimal = {
     id: string
     name: string
+    state: string | null
+    isActive: boolean | null
+    createdAt: Date | null
+    updatedAt: Date | null
+} & Partial<AuditDisplayInfo>
+
+type BranchFull = BranchMinimal & {
     address: string | null
     phone: string | null
     email: string | null
     pinCode: string | null
-    state: string | null
-    isActive: boolean | null
-    enabledFeaturesCount?: number
 }
+
+type BranchExpandedData = {
+    details: BranchFull
+    features: any[]
+}
+
+type Branch = BranchMinimal
 
 type FeatureAssignment = {
     featureId: string
@@ -35,7 +48,28 @@ type Props = {
     allFeatures: Feature[]
 }
 
-export default function BranchesClient({ branches, allFeatures }: Props) {
+export default function BranchesClient({ branches: initialBranches, allFeatures }: Props) {
+    const fetchBranchExpandedData = async (id: string): Promise<BranchExpandedData | null> => {
+        const [details, features] = await Promise.all([
+            getBranchDetails(id),
+            getBranchFeatures(id)
+        ])
+        if (!details) return null
+        return { details: details as BranchFull, features }
+    }
+
+    const {
+        items: branches,
+        expandedData,
+        loadingDetails,
+        refreshList: refreshBranches,
+        loadExpandedData,
+    } = useExpandableTable<Branch, BranchExpandedData>({
+        initialData: initialBranches,
+        fetchList: getBranchesMinimal,
+        fetchExpandedData: fetchBranchExpandedData,
+    })
+
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingBranch, setEditingBranch] = useState<Branch | null>(null)
     const [formData, setFormData] = useState({ name: "", address: "", phone: "", email: "", pinCode: "", state: "" })
@@ -59,11 +93,13 @@ export default function BranchesClient({ branches, allFeatures }: Props) {
         if (editingBranch) {
             const result = await execute(updateBranch(editingBranch.id, submitData))
             if (result?.success) {
+                await refreshBranches()
                 closeModal()
             }
         } else {
             const result = await execute(createBranch(submitData))
             if (result?.success) {
+                await refreshBranches()
                 closeModal()
             }
         }
@@ -77,33 +113,42 @@ export default function BranchesClient({ branches, allFeatures }: Props) {
         clearError()
     }
 
+    const handleDelete = async (branch: Branch) => {
+        if (!confirm(`Are you sure you want to delete "${branch.name}"? This action cannot be undone.`)) {
+            return
+        }
+        const result = await execute(deleteBranch(branch.id))
+        if (result?.success) {
+            await refreshBranches()
+        }
+    }
+
+
     const openEdit = async (branch: Branch) => {
         setEditingBranch(branch)
+        setIsModalOpen(true)
+        
+        // Load all expanded data (details + features)
+        await loadExpandedData(branch.id)
+        const expanded = expandedData[branch.id]
+        
         setFormData({
             name: branch.name,
-            address: branch.address || "",
-            phone: branch.phone || "",
-            email: branch.email || "",
-            pinCode: branch.pinCode || "",
+            address: expanded?.details.address || "",
+            phone: expanded?.details.phone || "",
+            email: expanded?.details.email || "",
+            pinCode: expanded?.details.pinCode || "",
             state: branch.state || ""
         })
         
-        // Load existing feature assignments
-        setLoadingFeatures(true)
-        try {
-            const existingFeatures = await getBranchFeatures(branch.id)
+        // Set feature assignments from expanded data
+        if (expanded?.features) {
             const assignments: Record<string, boolean> = {}
-            existingFeatures.forEach((f) => {
+            expanded.features.forEach((f) => {
                 assignments[f.featureId] = f.isEnabled ?? true
             })
             setFeatureAssignments(assignments)
-        } catch (err) {
-            console.error("Failed to load branch features:", err)
-        } finally {
-            setLoadingFeatures(false)
         }
-        
-        setIsModalOpen(true)
     }
 
     const openCreate = () => {
@@ -153,51 +198,102 @@ export default function BranchesClient({ branches, allFeatures }: Props) {
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>
+                            <th className="w-12"></th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Features</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {branches.map((branch) => (
-                            <tr key={branch.id}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    {branch.name}
-                                    <div className="text-xs text-gray-400">{branch.email}</div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <div>{branch.phone}</div>
-                                </td>
-                                <td className="px-6 py-4 text-sm text-gray-500">
-                                    <div className="max-w-xs truncate">{branch.address}</div>
-                                    <div className="text-xs">{branch.state} - {branch.pinCode}</div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                                        <Settings size={12} />
-                                        {branch.enabledFeaturesCount ?? 0} / {allFeatures.length}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {branch.isActive ? (
-                                        <span className="flex items-center text-green-600 gap-1"><CheckCircle size={16} /> Active</span>
-                                    ) : (
-                                        <span className="flex items-center text-red-600 gap-1"><XCircle size={16} /> Inactive</span>
-                                    )}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    <button onClick={() => openEdit(branch)} className="text-indigo-600 hover:text-indigo-900">
-                                        <Edit2 size={16} />
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
+                        {branches.map((branch) => {
+                            const expanded = expandedData[branch.id]
+                            const branchFeatures = expanded?.features || []
+                            const enabledFeatures = branchFeatures.filter((f: any) => f.isEnabled)
+                            
+                            return (
+                                <ExpandableTableRow
+                                    key={branch.id}
+                                    onExpand={() => loadExpandedData(branch.id)}
+                                    isLoading={loadingDetails[branch.id]}
+                                    columns={[
+                                        <div className="font-medium text-gray-900">{branch.name}</div>,
+                                        <div className="text-gray-500">{branch.state || "—"}</div>,
+                                        branch.isActive ? (
+                                            <span className="inline-flex items-center gap-1 text-green-600 text-xs">
+                                                <CheckCircle size={14} /> Active
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 text-red-600 text-xs">
+                                                <XCircle size={14} /> Inactive
+                                            </span>
+                                        ),
+                                        <div className="flex justify-end gap-2">
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); openEdit(branch); }} 
+                                                className="text-indigo-600 hover:text-indigo-900"
+                                                title="Edit Branch"
+                                            >
+                                                <Edit2 size={16} />
+                                            </button>
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleDelete(branch); }} 
+                                                className="text-red-600 hover:text-red-900"
+                                                title="Delete Branch"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    ]}
+                                    expandedContent={
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <ExpandedDetailSection title="Contact Information">
+                                                <ExpandedDetailRow label="Email" value={expanded?.details.email} />
+                                                <ExpandedDetailRow label="Phone" value={expanded?.details.phone} />
+                                                <ExpandedDetailRow label="Address" value={expanded?.details.address} />
+                                                <ExpandedDetailRow label="Pin Code" value={expanded?.details.pinCode} />
+                                                <ExpandedDetailRow label="State" value={expanded?.details.state} />
+                                            </ExpandedDetailSection>
+                                            
+                                            <ExpandedDetailSection title="Features">
+                                                <ExpandedDetailRow 
+                                                    label="Enabled Features" 
+                                                    value={`${enabledFeatures.length} / ${allFeatures.length}`} 
+                                                />
+                                                {branchFeatures.length > 0 && (
+                                                    <div className="mt-2">
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {enabledFeatures.map((f: any) => {
+                                                                const feature = allFeatures.find(af => af.id === f.featureId)
+                                                                return (
+                                                                    <span key={f.featureId} className="inline-flex items-center px-2 py-1 rounded text-xs bg-indigo-100 text-indigo-800">
+                                                                        {feature?.name}
+                                                                    </span>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </ExpandedDetailSection>
+                                            
+                                            <ExpandedDetailSection title="Audit Information">
+                                                <ExpandedDetailRow 
+                                                    label="Created" 
+                                                    value={expanded?.details.createdAt ? `${new Date(expanded.details.createdAt).toLocaleDateString()} by ${expanded.details.createdByName || 'Unknown'}` : '—'} 
+                                                />
+                                                <ExpandedDetailRow 
+                                                    label="Last Updated" 
+                                                    value={expanded?.details.updatedAt ? `${new Date(expanded.details.updatedAt).toLocaleDateString()} by ${expanded.details.updatedByName || 'Unknown'}` : '—'} 
+                                                />
+                                            </ExpandedDetailSection>
+                                        </div>
+                                    }
+                                />
+                            )
+                        })}
                         {branches.length === 0 && (
                             <tr>
-                                <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">
+                                <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
                                     No branches found. Add one to get started.
                                 </td>
                             </tr>

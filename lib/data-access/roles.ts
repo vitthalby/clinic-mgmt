@@ -7,10 +7,14 @@
 import { db } from "@/lib/db"
 import { roles, features, roleFeaturePermissions } from "@/lib/schema"
 import { eq, desc, or, isNull, and } from "drizzle-orm"
+import type { AuditDisplayInfo } from "@/types/audit"
+import { resolveAuditUsers } from "./audit-utils"
 
 export type Role = typeof roles.$inferSelect
 export type Feature = typeof features.$inferSelect
 export type RolePermission = typeof roleFeaturePermissions.$inferSelect
+
+export type RoleWithAudit = Role & AuditDisplayInfo
 
 /**
  * Get all roles
@@ -19,6 +23,17 @@ export async function getAllRoles(): Promise<Role[]> {
   return db.query.roles.findMany({
     orderBy: [desc(roles.createdAt)],
   })
+}
+
+/**
+ * Get all roles with audit user names resolved
+ */
+export async function getAllRolesWithAudit(): Promise<RoleWithAudit[]> {
+  const roleList = await db.query.roles.findMany({
+    orderBy: [desc(roles.createdAt)],
+  })
+
+  return resolveAuditUsers(roleList)
 }
 
 /**

@@ -1,4 +1,4 @@
-import { getFeatures, getRoles, getAllBranches } from "@/app/actions/roles"
+import { getFeatures, getRolesMinimal, getAllBranches } from "@/app/actions/roles"
 import { getEnabledFeaturesForBranch } from "@/app/actions/branches"
 import RolesClient from "@/components/management/RolesClient"
 import { auth } from "@/auth"
@@ -40,7 +40,7 @@ export default async function RolesPage() {
         }
     }
 
-    const roles = await getRoles(branchId, isSuperUser)
+    const roles = await getRolesMinimal(branchId, isSuperUser)
     const allBranches = isSuperUser ? await getAllBranches() : []
     
     // Get features based on context:

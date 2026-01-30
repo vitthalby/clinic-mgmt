@@ -19,6 +19,155 @@ export type BranchRoleAssignment = {
     roleId: string
 }
 
+export type UserMinimal = Pick<typeof users.$inferSelect, 'id' | 'name' | 'firstName' | 'lastName' | 'email' | 'role'>
+
+export type UserFull = UserMinimal & Pick<typeof users.$inferSelect, 'mobile' | 'dob' | 'image'> & {
+    branches: Array<{
+        id: string
+        name: string
+        roleId: string
+        roleName: string
+    }>
+}
+
+/**
+ * Get users minimal data for list view
+ * Only includes basic user info and audit fields
+ */
+export async function getUsersMinimal(branchId?: string, isSuperUser?: boolean): Promise<UserMinimal[]> {
+    try {
+        await requireAuth()
+        const adminRoleName = getAdminRoleName()
+
+        let allUsers: UserMinimal[] = []
+
+        if (isSuperUser && !branchId) {
+            // Super users see all users if no branch filter
+            allUsers = await db
+                .select({
+                    id: users.id,
+                    name: users.name,
+                    firstName: users.firstName,
+                    lastName: users.lastName,
+                    email: users.email,
+                    role: users.role,
+                })
+                .from(users)
+                .orderBy(desc(users.email))
+        } else if (branchId) {
+            if (isSuperUser) {
+                // Super user viewing a specific branch
+                const branchUsers = await db
+                    .select({
+                        id: users.id,
+                        name: users.name,
+                        firstName: users.firstName,
+                        lastName: users.lastName,
+                        email: users.email,
+                        role: users.role,
+                    })
+                    .from(users)
+                    .innerJoin(userBranchRoles, eq(users.id, userBranchRoles.userId))
+                    .where(eq(userBranchRoles.branchId, branchId))
+                    .orderBy(desc(users.email))
+
+                allUsers = branchUsers
+            } else {
+                // Non-super users only see non-admin users in their branch
+                const branchUsers = await db
+                    .select({
+                        id: users.id,
+                        name: users.name,
+                        firstName: users.firstName,
+                        lastName: users.lastName,
+                        email: users.email,
+                        role: users.role,
+                    })
+                    .from(users)
+                    .innerJoin(userBranchRoles, eq(users.id, userBranchRoles.userId))
+                    .where(
+                        and(
+                            eq(userBranchRoles.branchId, branchId),
+                            isNull(users.role) // Exclude global admins
+                        )
+                    )
+                    .orderBy(desc(users.email))
+
+                allUsers = branchUsers
+            }
+        } else if (isSuperUser) {
+            allUsers = await db
+                .select({
+                    id: users.id,
+                    name: users.name,
+                    firstName: users.firstName,
+                    lastName: users.lastName,
+                    email: users.email,
+                    role: users.role,
+                })
+                .from(users)
+                .orderBy(desc(users.email))
+        }
+
+        return allUsers
+    } catch (error) {
+        console.error("getUsersMinimal error:", error)
+        throw error
+    }
+}
+
+/**
+ * Get full user details for expanded view
+ */
+export async function getUserDetails(userId: string): Promise<UserFull | null> {
+    try {
+        await requireAuth()
+
+        const user = await db.query.users.findFirst({
+            where: eq(users.id, userId),
+            columns: {
+                id: true,
+                name: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                mobile: true,
+                dob: true,
+                image: true,
+                role: true,
+            }
+        })
+
+        if (!user) return null
+
+        // Get branch-role assignments
+        const mappings = await db
+            .select({
+                branchId: userBranchRoles.branchId,
+                roleId: userBranchRoles.roleId,
+                branchName: branches.name,
+                roleName: roles.name,
+            })
+            .from(userBranchRoles)
+            .innerJoin(branches, eq(userBranchRoles.branchId, branches.id))
+            .innerJoin(roles, eq(userBranchRoles.roleId, roles.id))
+            .where(eq(userBranchRoles.userId, userId))
+
+        return {
+            ...user,
+            branches: mappings.map(m => ({
+                id: m.branchId,
+                name: m.branchName,
+                roleId: m.roleId,
+                roleName: m.roleName,
+            }))
+        }
+    } catch (error) {
+        console.error("getUserDetails error:", error)
+        return null
+    }
+}
+
 /**
  * Get users with their branch-role assignments
  * Optimized to batch fetch related data

@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { roles, features, roleFeaturePermissions, branches, userBranchRoles } from "@/lib/schema"
-import { eq, desc, or, isNull, and } from "drizzle-orm"
+import { roles, features, roleFeaturePermissions, branches, userBranchRoles, users } from "@/lib/schema"
+import { eq, desc, or, isNull, and, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireAuth, requirePermission } from "@/lib/auth-utils"
 import {
@@ -15,49 +15,147 @@ import {
 } from "@/lib/errors"
 
 /**
- * Get roles, optionally filtered by branch
+ * Get roles with minimal data for list view (optimized)
  * - Super users (isSuperUser=true): Get all roles, optionally filtered by branchId
  * - Non-super users: Only get roles for the specified branchId
  */
-export async function getRoles(branchId?: string, isSuperUser?: boolean) {
+export async function getRolesMinimal(branchId?: string, isSuperUser?: boolean) {
     try {
         await requireAuth()
 
+        let roleList: any[] = []
+
         // If super user and no branch filter, return all roles
         if (isSuperUser && !branchId) {
-            return db.query.roles.findMany({
+            roleList = await db.query.roles.findMany({
+                columns: {
+                    id: true,
+                    name: true,
+                    branchId: true,
+                    createdAt: true,
+                    updatedAt: true,
+                    createdBy: true,
+                    updatedBy: true,
+                },
                 orderBy: [desc(roles.createdAt)],
             })
-        }
-
-        // If branch is provided
-        if (branchId) {
+        } else if (branchId) {
             if (isSuperUser) {
                 // Super users see branch roles + all global roles (including ADMIN)
-                return db.query.roles.findMany({
+                roleList = await db.query.roles.findMany({
                     where: or(eq(roles.branchId, branchId), isNull(roles.branchId)),
+                    columns: {
+                        id: true,
+                        name: true,
+                        branchId: true,
+                        createdAt: true,
+                        updatedAt: true,
+                        createdBy: true,
+                        updatedBy: true,
+                    },
                     orderBy: [desc(roles.createdAt)],
                 })
             } else {
                 // Non-super users only see roles for their SPECIFIC branch
-                return db.query.roles.findMany({
+                roleList = await db.query.roles.findMany({
                     where: eq(roles.branchId, branchId),
+                    columns: {
+                        id: true,
+                        name: true,
+                        branchId: true,
+                        createdAt: true,
+                        updatedAt: true,
+                        createdBy: true,
+                        updatedBy: true,
+                    },
                     orderBy: [desc(roles.createdAt)],
                 })
             }
-        }
-
-        // Fallback for super users
-        if (isSuperUser) {
-            return db.query.roles.findMany({
+        } else if (isSuperUser) {
+            roleList = await db.query.roles.findMany({
+                columns: {
+                    id: true,
+                    name: true,
+                    branchId: true,
+                    createdAt: true,
+                    updatedAt: true,
+                    createdBy: true,
+                    updatedBy: true,
+                },
                 orderBy: [desc(roles.createdAt)],
             })
         }
 
-        return []
+        if (roleList.length === 0) {
+            return []
+        }
+
+        // Resolve audit user names
+        const userIds = new Set<string>()
+        roleList.forEach(r => {
+            if (r.createdBy) userIds.add(r.createdBy)
+            if (r.updatedBy) userIds.add(r.updatedBy)
+        })
+
+        let userMap = new Map<string, string>()
+        if (userIds.size > 0) {
+            const userList = await db.query.users.findMany({
+                where: inArray(users.id, Array.from(userIds)),
+                columns: { id: true, firstName: true, lastName: true, name: true, email: true },
+            })
+            userMap = new Map(userList.map(u => [
+                u.id,
+                u.firstName ? `${u.firstName} ${u.lastName || ''}`.trim() : (u.name || u.email)
+            ]))
+        }
+
+        return roleList.map(r => ({
+            ...r,
+            createdByName: r.createdBy ? userMap.get(r.createdBy) || null : null,
+            updatedByName: r.updatedBy ? userMap.get(r.updatedBy) || null : null,
+        }))
     } catch (error) {
-        console.error("getRoles error:", error)
+        console.error("getRolesMinimal error:", error)
         return []
+    }
+}
+
+/**
+ * Get full role details by ID (for expanded view)
+ */
+export async function getRoleDetails(id: string) {
+    try {
+        await requireAuth()
+        
+        const role = await db.query.roles.findFirst({
+            where: eq(roles.id, id),
+        })
+
+        if (!role) return null
+
+        // Get audit user names
+        const userIds = [role.createdBy, role.updatedBy].filter(Boolean) as string[]
+        let userMap = new Map<string, string>()
+        
+        if (userIds.length > 0) {
+            const userList = await db.query.users.findMany({
+                where: inArray(users.id, userIds),
+                columns: { id: true, firstName: true, lastName: true, name: true, email: true },
+            })
+            userMap = new Map(userList.map(u => [
+                u.id,
+                u.firstName ? `${u.firstName} ${u.lastName || ''}`.trim() : (u.name || u.email)
+            ]))
+        }
+
+        return {
+            ...role,
+            createdByName: role.createdBy ? userMap.get(role.createdBy) || null : null,
+            updatedByName: role.updatedBy ? userMap.get(role.updatedBy) || null : null,
+        }
+    } catch (error) {
+        console.error("getRoleDetails error:", error)
+        return null
     }
 }
 
@@ -93,7 +191,7 @@ export async function createRole(
     permissions?: PermissionInput[]
 ): Promise<ActionResult<{ id: string }>> {
     try {
-        await requirePermission("roles", "add")
+        const user = await requirePermission("roles", "add")
 
         // Validate required fields
         if (!data.name?.trim()) {
@@ -119,6 +217,8 @@ export async function createRole(
                 name: roleName,
                 description: data.description?.trim(),
                 branchId: data.branchId || null,
+                createdBy: user.id,
+                updatedBy: user.id,
             })
             .returning({ id: roles.id })
 
@@ -144,7 +244,7 @@ export async function updateRole(
     permissions?: PermissionInput[]
 ): Promise<ActionResult<void>> {
     try {
-        await requirePermission("roles", "edit")
+        const user = await requirePermission("roles", "edit")
 
         // Verify role exists
         const existing = await db.query.roles.findFirst({
@@ -176,6 +276,7 @@ export async function updateRole(
                 description: data.description?.trim(),
                 branchId: data.branchId !== undefined ? data.branchId : undefined,
                 updatedAt: new Date(),
+                updatedBy: user.id,
             })
             .where(eq(roles.id, id))
 

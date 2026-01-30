@@ -7,8 +7,12 @@
 import { db } from "@/lib/db"
 import { branches, userBranchRoles } from "@/lib/schema"
 import { eq, desc, inArray } from "drizzle-orm"
+import type { AuditDisplayInfo } from "@/types/audit"
+import { resolveAuditUsers } from "./audit-utils"
 
 export type Branch = typeof branches.$inferSelect
+
+export type BranchWithAudit = Branch & AuditDisplayInfo
 
 /**
  * Get all branches
@@ -17,6 +21,17 @@ export async function getAllBranches(): Promise<Branch[]> {
   return db.query.branches.findMany({
     orderBy: [desc(branches.createdAt)],
   })
+}
+
+/**
+ * Get all branches with audit user names resolved
+ */
+export async function getAllBranchesWithAudit(): Promise<BranchWithAudit[]> {
+  const branchList = await db.query.branches.findMany({
+    orderBy: [desc(branches.createdAt)],
+  })
+
+  return resolveAuditUsers(branchList)
 }
 
 /**

@@ -1,29 +1,36 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { createUser, updateUser, deleteUser, getRolesForBranch, BranchRoleAssignment } from "@/app/actions/users"
+import { createUser, updateUser, deleteUser, getRolesForBranch, getUserDetails, getUsersMinimal, BranchRoleAssignment } from "@/app/actions/users"
 import { Shield, Building, Edit2, Plus, Trash2 } from "lucide-react"
+import { useExpandableTable } from "@/hooks/useExpandableTable"
+import { ExpandableTableRow, ExpandedDetailRow, ExpandedDetailSection } from "@/components/ui"
+import type { AuditDisplayInfo } from "@/types/audit"
 
-type BranchRole = {
-    branchId: string
-    branchName: string
-    roleId: string
-    roleName: string
-}
-
-type User = {
+type UserMinimal = {
     id: string
     name: string | null
     firstName: string | null
     lastName: string | null
     email: string
+    role: string | null
+}
+
+type UserFull = UserMinimal & {
     mobile: string | null
     dob: Date | null
-    role: string | null
     image: string | null
-    branchRoles?: BranchRole[]
-    branches: { id: string; name: string; roleId?: string; roleName?: string }[]
+    branches: Array<{
+        id: string
+        name: string
+        roleId: string
+        roleName: string
+    }>
 }
+
+type UserExpandedData = UserFull
+
+type User = UserMinimal
 
 type Branch = {
     id: string
@@ -54,13 +61,25 @@ type BranchRoleFormEntry = {
 }
 
 export default function UsersClient({
-    users,
+    users: initialUsers,
     allBranches,
     allRoles,
     adminRoleName,
     isSuperUser = false,
     currentUserId = ""
 }: UsersClientProps) {
+    const {
+        items: users,
+        expandedData,
+        loadingDetails,
+        refreshList: refreshUsers,
+        loadExpandedData,
+    } = useExpandableTable<User, UserExpandedData>({
+        initialData: initialUsers,
+        fetchList: () => getUsersMinimal(undefined, isSuperUser), // TODO: Add branch filtering
+        fetchExpandedData: getUserDetails,
+    })
+
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingUser, setEditingUser] = useState<User | null>(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -123,19 +142,25 @@ export default function UsersClient({
         setIsModalOpen(true)
     }
 
-    const openEdit = (user: User) => {
+    const openEdit = async (user: User) => {
         setEditingUser(user)
+        setIsModalOpen(true)
+        
+        // Load full user details if not already loaded
+        await loadExpandedData(user.id)
+        const fullUser = expandedData[user.id]
+        
         const isAdmin = user.role === adminRoleName
         setFormData({
             firstName: user.firstName || "",
             lastName: user.lastName || "",
             email: user.email,
-            mobile: user.mobile || "",
-            dob: user.dob ? new Date(user.dob).toISOString().split('T')[0] : "",
+            mobile: fullUser?.mobile || "",
+            dob: fullUser?.dob ? new Date(fullUser.dob).toISOString().split('T')[0] : "",
             isAdmin: isAdmin,
         })
         if (!isAdmin) {
-            initializeBranchRoleEntries(user)
+            initializeBranchRoleEntries(fullUser || user)
         }
         setIsModalOpen(true)
         setError(null)
@@ -183,10 +208,12 @@ export default function UsersClient({
             } else {
                 await createUser(userData)
             }
+            
+            // Refresh users list
+            await refreshUsers()
             setIsModalOpen(false)
             setEditingUser(null)
             resetForm()
-            window.location.reload()
 
         } catch (error: any) {
             console.error(error)
@@ -200,8 +227,8 @@ export default function UsersClient({
         if (!confirm("Are you sure you want to delete this user?")) return
         try {
             await deleteUser(id)
-            window.location.reload()
-
+            // Refresh users list
+            await refreshUsers()
         } catch (error) {
             console.error(error)
             alert("Failed to delete user")
@@ -247,115 +274,125 @@ export default function UsersClient({
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>
+                            <th className="w-12"></th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Branches</th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {users.map((user) => (
-                            <tr key={user.id}>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="flex items-center">
-                                        <div className="h-10 w-10 flex-shrink-0">
-                                            {user.image ? (
-                                                <img className="h-10 w-10 rounded-full" src={user.image} alt="" />
-                                            ) : (
-                                                <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-                                                    {(user.firstName && user.firstName[0]) || (user.name && user.name[0]) || user.email[0]}
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="ml-4">
-                                            <div className="text-sm font-medium text-gray-900">{user.firstName ? `${user.firstName} ${user.lastName || ''}` : user.name}</div>
-                                            <div className="text-xs text-gray-500" suppressHydrationWarning>Born: {user.dob ? new Date(user.dob).toLocaleDateString() : 'N/A'}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="text-sm text-gray-900">{user.email}</div>
-                                    <div className="text-sm text-gray-500">{user.mobile || '-'}</div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    {user.role === adminRoleName ? (
-                                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
-                                            {user.role}
-                                        </span>
-                                    ) : (
-                                        <div className="flex flex-col gap-1">
-                                            {isSuperUser ? (
-                                                // Super users see first 2 branch roles
-                                                user.branches.length > 0 ? (
-                                                    user.branches.slice(0, 2).map(b => (
-                                                        <span key={b.id} className="text-xs text-gray-600">
-                                                            {b.roleName || 'No Role'}
+                        {users.map((user) => {
+                            const fullUser = expandedData[user.id]
+                            const isAdmin = user.role === adminRoleName
+                            
+                            return (
+                                <ExpandableTableRow
+                                    key={user.id}
+                                    onExpand={() => loadExpandedData(user.id)}
+                                    isLoading={loadingDetails[user.id]}
+                                    columns={[
+                                        <div className="flex items-center">
+                                            <div className="h-10 w-10 flex-shrink-0">
+                                                {fullUser?.image ? (
+                                                    <img className="h-10 w-10 rounded-full" src={fullUser.image} alt="" />
+                                                ) : (
+                                                    <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+                                                        {(user.firstName && user.firstName[0]) || (user.name && user.name[0]) || user.email[0]}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="ml-4">
+                                                <div className="text-sm font-medium text-gray-900">{user.firstName ? `${user.firstName} ${user.lastName || ''}` : user.name}</div>
+                                                <div className="text-xs text-gray-500" suppressHydrationWarning>Born: {fullUser?.dob ? new Date(fullUser.dob).toLocaleDateString() : 'N/A'}</div>
+                                            </div>
+                                        </div>,
+                                        <div className="text-sm text-gray-900">{user.email}</div>,
+                                        isAdmin ? (
+                                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
+                                                {user.role}
+                                            </span>
+                                        ) : (
+                                            <div className="flex flex-col gap-1">
+                                                {isSuperUser ? (
+                                                    // Super users see first 2 branch roles
+                                                    fullUser?.branches && fullUser.branches.length > 0 ? (
+                                                        fullUser.branches.slice(0, 2).map(b => (
+                                                            <span key={b.id} className="text-xs text-gray-600">
+                                                                {b.roleName || 'No Role'}
+                                                            </span>
+                                                        ))
+                                                    ) : (
+                                                        <span className="text-xs text-gray-400 italic">No assignments</span>
+                                                    )
+                                                ) : (
+                                                    // Non-super users only see role for CURRENT branch
+                                                    fullUser?.branches && fullUser.branches.length > 0 ? (
+                                                        <span className="text-xs text-gray-900 font-medium">
+                                                            {fullUser.branches[0].roleName || 'No Role'}
                                                         </span>
+                                                    ) : (
+                                                        <span className="text-xs text-gray-400 italic">No assignment</span>
+                                                    )
+                                                )}
+                                                {isSuperUser && fullUser?.branches && fullUser.branches.length > 2 && (
+                                                    <span className="text-xs text-gray-400">+{fullUser.branches.length - 2} more</span>
+                                                )}
+                                            </div>
+                                        ),
+                                        <div className="flex justify-end gap-2">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); openEdit(user); }}
+                                                className={`${user.id === currentUserId ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-900'}`}
+                                                disabled={user.id === currentUserId}
+                                                title={user.id === currentUserId ? "You cannot edit yourself" : "Edit"}
+                                            >
+                                                <Edit2 size={16} />
+                                            </button>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleDelete(user.id); }}
+                                                className={`${user.id === currentUserId ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:text-red-900'}`}
+                                                disabled={user.id === currentUserId}
+                                                title={user.id === currentUserId ? "You cannot delete yourself" : "Delete"}
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    ].filter(Boolean)}
+                                    expandedContent={
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <ExpandedDetailSection title="Personal Information">
+                                                <ExpandedDetailRow label="Full Name" value={`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.name} />
+                                                <ExpandedDetailRow label="Email" value={user.email} />
+                                                <ExpandedDetailRow label="Mobile" value={fullUser?.mobile || '—'} />
+                                                <ExpandedDetailRow label="Date of Birth" value={fullUser?.dob ? new Date(fullUser.dob).toLocaleDateString() : '—'} />
+                                            </ExpandedDetailSection>
+                                            
+                                            <ExpandedDetailSection title="Branch Assignments">
+                                                {fullUser?.branches && fullUser.branches.length > 0 ? (
+                                                    fullUser.branches.map(branch => (
+                                                        <ExpandedDetailRow 
+                                                            key={branch.id}
+                                                            label={branch.name} 
+                                                            value={branch.roleName} 
+                                                        />
                                                     ))
                                                 ) : (
-                                                    <span className="text-xs text-gray-400 italic">No assignments</span>
-                                                )
-                                            ) : (
-                                                // Non-super users only see role for CURRENT branch
-                                                user.branches.length > 0 ? (
-                                                    <span className="text-xs text-gray-900 font-medium">
-                                                        {user.branches[0].roleName || 'No Role'}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-xs text-gray-400 italic">No assignment</span>
-                                                )
-                                            )}
-                                            {isSuperUser && user.branches.length > 2 && (
-                                                <span className="text-xs text-gray-400">+{user.branches.length - 2} more</span>
-                                            )}
+                                                    <ExpandedDetailRow label="Assignments" value="No branch assignments" />
+                                                )}
+                                            </ExpandedDetailSection>
                                         </div>
-                                    )}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {user.role === adminRoleName ? (
-                                        <span className="text-gray-400 italic">All Branches (Admin)</span>
-                                    ) : isSuperUser ? (
-                                        user.branches.length > 0 ? (
-                                            <div className="flex flex-wrap gap-1">
-                                                {user.branches.map(b => (
-                                                    <span key={b.id} className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded" title={`Role: ${b.roleName || 'None'}`}>
-                                                        {b.name}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <span className="text-red-500 font-medium italic">Required Branch Assignment!</span>
-                                        )
-                                    ) : (
-                                        // Non-super user only sees current branch
-                                        user.branches.length > 0 ? (
-                                            <span className="text-xs text-gray-600 font-medium">{user.branches[0].name}</span>
-                                        ) : (
-                                            <span className="text-red-500 font-medium italic">Required Branch Assignment!</span>
-                                        )
-                                    )}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    <button
-                                        onClick={() => openEdit(user)}
-                                        className={`${user.id === currentUserId ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-900'} mr-4`}
-                                        disabled={user.id === currentUserId}
-                                        title={user.id === currentUserId ? "You cannot edit yourself" : "Edit"}
-                                    >
-                                        <Edit2 size={16} />
-                                    </button>
-                                    <button
-                                        onClick={() => handleDelete(user.id)}
-                                        className={`${user.id === currentUserId ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:text-red-900'}`}
-                                        disabled={user.id === currentUserId}
-                                        title={user.id === currentUserId ? "You cannot delete yourself" : "Delete"}
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
+                                    }
+                                />
+                            )
+                        })}
+                        {users.length === 0 && (
+                            <tr>
+                                <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
+                                    No users found.
                                 </td>
                             </tr>
-                        ))}
+                        )}
                     </tbody>
                 </table>
             </div>

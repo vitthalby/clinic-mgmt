@@ -50,8 +50,9 @@ export default async function ManagementLayout({
 
         // If a branch is selected, verify it's still assigned to this user
         if (branchId && !allowedBranchIds.includes(branchId)) {
-            cookies().delete('clinic-branch-id')
-            branchId = undefined
+            // Instead of deleting cookie immediately, redirect to branch selection
+            // This avoids cookie modification issues during login flow
+            redirect('/select-branch')
         }
 
         // If no branch selected (or was just cleared), redirect to selection

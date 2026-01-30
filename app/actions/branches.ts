@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { branches, userBranchRoles, branchFeatures, features } from "@/lib/schema"
+import { branches, userBranchRoles, branchFeatures, features, users } from "@/lib/schema"
 import { eq, desc, inArray, and } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
@@ -103,6 +103,9 @@ export async function createBranch(data: {
             throw new ValidationError("Branch name is required")
         }
 
+        // Get current user for audit
+        const user = await requireAuth()
+
         // Insert branch
         const [newBranch] = await db.insert(branches).values({
             name: data.name.trim(),
@@ -111,6 +114,8 @@ export async function createBranch(data: {
             email: data.email?.trim(),
             pinCode: data.pinCode?.trim(),
             state: data.state?.trim(),
+            createdBy: user.id,
+            updatedBy: user.id,
         }).returning()
 
         // Assign features if provided
@@ -149,7 +154,7 @@ export async function updateBranch(
 ): Promise<ActionResult<void>> {
     try {
         // Require permission to edit branches
-        await requirePermission("branches", "edit")
+        const user = await requirePermission("branches", "edit")
 
         // Verify branch exists
         const existing = await db.query.branches.findFirst({
@@ -170,6 +175,7 @@ export async function updateBranch(
             state: data.state?.trim(),
             isActive: data.isActive,
             updatedAt: new Date(),
+            updatedBy: user.id,
         }).where(eq(branches.id, id))
 
         // Update feature assignments if provided
@@ -234,43 +240,92 @@ export async function getBranchFeatures(branchId: string) {
 }
 
 /**
- * Get branches with their enabled features count
+ * Get branches with minimal data for list view (optimized)
  */
-export async function getBranchesWithFeatures() {
+export async function getBranchesMinimal() {
     try {
         await requireAuth()
         
         const allBranches = await db.query.branches.findMany({
+            columns: {
+                id: true,
+                name: true,
+                state: true,
+                isActive: true,
+                createdAt: true,
+                updatedAt: true,
+                createdBy: true,
+                updatedBy: true,
+            },
             orderBy: [desc(branches.createdAt)],
         })
 
-        // Batch fetch feature counts
-        const branchIds = allBranches.map((b) => b.id)
-        
-        if (branchIds.length === 0) {
-            return allBranches.map((b) => ({ ...b, enabledFeaturesCount: 0 }))
-        }
+        // Resolve audit user names
+        const userIds = new Set<string>()
+        allBranches.forEach(b => {
+            if (b.createdBy) userIds.add(b.createdBy)
+            if (b.updatedBy) userIds.add(b.updatedBy)
+        })
 
-        const featureCounts = await db
-            .select({
-                branchId: branchFeatures.branchId,
+        let userMap = new Map<string, string>()
+        if (userIds.size > 0) {
+            const userList = await db.query.users.findMany({
+                where: inArray(users.id, Array.from(userIds)),
+                columns: { id: true, firstName: true, lastName: true, name: true, email: true },
             })
-            .from(branchFeatures)
-            .where(eq(branchFeatures.isEnabled, true))
-
-        // Count features per branch
-        const countMap = new Map<string, number>()
-        for (const fc of featureCounts) {
-            countMap.set(fc.branchId, (countMap.get(fc.branchId) || 0) + 1)
+            userMap = new Map(userList.map(u => [
+                u.id,
+                u.firstName ? `${u.firstName} ${u.lastName || ''}`.trim() : (u.name || u.email)
+            ]))
         }
 
         return allBranches.map((b) => ({
             ...b,
-            enabledFeaturesCount: countMap.get(b.id) || 0,
+            createdByName: b.createdBy ? userMap.get(b.createdBy) || null : null,
+            updatedByName: b.updatedBy ? userMap.get(b.updatedBy) || null : null,
         }))
     } catch (error) {
-        console.error("getBranchesWithFeatures error:", error)
+        console.error("getBranchesMinimal error:", error)
         return []
+    }
+}
+
+/**
+ * Get full branch details by ID (for expanded view)
+ */
+export async function getBranchDetails(id: string) {
+    try {
+        await requireAuth()
+        
+        const branch = await db.query.branches.findFirst({
+            where: eq(branches.id, id),
+        })
+
+        if (!branch) return null
+
+        // Get audit user names
+        const userIds = [branch.createdBy, branch.updatedBy].filter(Boolean) as string[]
+        let userMap = new Map<string, string>()
+        
+        if (userIds.length > 0) {
+            const userList = await db.query.users.findMany({
+                where: inArray(users.id, userIds),
+                columns: { id: true, firstName: true, lastName: true, name: true, email: true },
+            })
+            userMap = new Map(userList.map(u => [
+                u.id,
+                u.firstName ? `${u.firstName} ${u.lastName || ''}`.trim() : (u.name || u.email)
+            ]))
+        }
+
+        return {
+            ...branch,
+            createdByName: branch.createdBy ? userMap.get(branch.createdBy) || null : null,
+            updatedByName: branch.updatedBy ? userMap.get(branch.updatedBy) || null : null,
+        }
+    } catch (error) {
+        console.error("getBranchDetails error:", error)
+        return null
     }
 }
 

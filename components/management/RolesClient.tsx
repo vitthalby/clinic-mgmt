@@ -1,19 +1,30 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createRole, updateRole, deleteRole, getRolePermissions, getRoles } from "@/app/actions/roles"
+import { createRole, updateRole, deleteRole, getRolePermissions, getRoleDetails, getRolesMinimal } from "@/app/actions/roles"
 import { getEnabledFeaturesForBranch } from "@/app/actions/branches"
 import { Plus, Edit2, Trash2, Building, AlertCircle } from "lucide-react"
 import { useFeaturePermissions } from "@/components/providers/PermissionsProvider"
+import { useExpandableTable } from "@/hooks/useExpandableTable"
 import PermissionsMatrix, { Feature, Permission } from "@/components/management/PermissionsMatrix"
+import { ExpandableTableRow, ExpandedDetailRow, ExpandedDetailSection } from "@/components/ui"
+import type { AuditDisplayInfo } from "@/types/audit"
 
-type Role = {
+type RoleMinimal = {
     id: string
     name: string
-    description: string | null
     branchId: string | null
     createdAt: Date | null
+    updatedAt: Date | null
+} & Partial<AuditDisplayInfo>
+
+type RoleFull = RoleMinimal & {
+    description: string | null
 }
+
+type RoleExpandedData = RoleFull
+
+type Role = RoleMinimal
 
 type Branch = {
     id: string
@@ -40,12 +51,24 @@ export default function RolesClient({
     currentRoleId = ""
 }: RolesClientProps) {
     const { canAdd, canEdit, canDelete } = useFeaturePermissions("roles")
-    const [roles, setRoles] = useState(initialRoles)
+    const [filterBranchId, setFilterBranchId] = useState<string>(currentBranchId || "")
+    
+    const {
+        items: roles,
+        expandedData,
+        loadingDetails,
+        refreshList: refreshRoles,
+        loadExpandedData,
+    } = useExpandableTable<Role, RoleExpandedData>({
+        initialData: initialRoles,
+        fetchList: () => getRolesMinimal(filterBranchId || currentBranchId, isSuperUser),
+        fetchExpandedData: getRoleDetails,
+    })
+
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingRole, setEditingRole] = useState<Role | null>(null)
     const [formData, setFormData] = useState({ name: "", description: "", branchId: "" })
     const [permissions, setPermissions] = useState<Permission[]>([])
-    const [filterBranchId, setFilterBranchId] = useState<string>(currentBranchId || "")
     
     // Branch-specific features for the modal
     const [modalFeatures, setModalFeatures] = useState<Feature[]>(initialFeatures)
@@ -53,6 +76,7 @@ export default function RolesClient({
 
     // Create a branch lookup map
     const branchMap = new Map(allBranches.map(b => [b.id, b.name]))
+
 
     // Load branch-specific features when branch selection changes in modal
     const loadBranchFeatures = async (branchId: string) => {
@@ -92,11 +116,8 @@ export default function RolesClient({
                 await createRole(roleData, permissions)
             }
 
-            // Refresh roles list using the active filter or current branch
-            const updatedRoles = await getRoles(filterBranchId || currentBranchId, isSuperUser)
-            setRoles(updatedRoles)
-
-
+            // Refresh roles list
+            await refreshRoles()
             setIsModalOpen(false)
             setEditingRole(null)
             setFormData({ name: "", description: "", branchId: "" })
@@ -111,10 +132,8 @@ export default function RolesClient({
         if (!confirm("Are you sure you want to delete this role?")) return
         try {
             await deleteRole(id)
-            // Refresh roles list using the active filter or current branch
-            const updatedRoles = await getRoles(filterBranchId || currentBranchId, isSuperUser)
-            setRoles(updatedRoles)
-
+            // Refresh roles list
+            await refreshRoles()
         } catch (error) {
             console.error(error)
             alert("Failed to delete role")
@@ -123,9 +142,15 @@ export default function RolesClient({
 
     const openEdit = async (role: Role) => {
         setEditingRole(role)
+        setIsModalOpen(true)
+        
+        // Load full role details if not already loaded
+        await loadExpandedData(role.id)
+        const fullRole = expandedData[role.id]
+        
         setFormData({
             name: role.name,
-            description: role.description || "",
+            description: fullRole?.description || "",
             branchId: role.branchId || ""
         })
 
@@ -195,8 +220,8 @@ export default function RolesClient({
 
     const handleBranchFilterChange = async (branchId: string) => {
         setFilterBranchId(branchId)
-        const updatedRoles = await getRoles(branchId || undefined, isSuperUser)
-        setRoles(updatedRoles)
+        // Refresh page to reload with new filter
+        window.location.href = window.location.pathname
     }
 
     return (
@@ -244,40 +269,43 @@ export default function RolesClient({
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>
+                            <th className="w-12"></th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role Name</th>
                             {isSuperUser && (
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Branch</th>
                             )}
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                         {roles.map((role) => {
-                            const isSystemAdmin = role.name === adminRoleName && role.branchId === null;
+                            const fullRole = expandedData[role.id]
+                            const isSystemAdmin = role.name === adminRoleName && role.branchId === null
+                            
+
                             return (
-                                <tr key={role.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{role.name}</td>
-                                    {isSuperUser && (
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {role.branchId ? (
-                                                <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                                <ExpandableTableRow
+                                    key={role.id}
+                                    onExpand={() => loadExpandedData(role.id)}
+                                    isLoading={loadingDetails[role.id]}
+                                    columns={[
+                                        <div className="font-medium text-gray-900">{role.name}</div>,
+                                        isSuperUser ? (
+                                            role.branchId ? (
+                                                <span className="inline-flex items-center px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">
                                                     {branchMap.get(role.branchId) || "Unknown"}
                                                 </span>
                                             ) : (
-                                                <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">
+                                                <span className="inline-flex items-center px-2 py-1 rounded text-xs bg-purple-100 text-purple-800">
                                                     Global
                                                 </span>
-                                            )}
-                                        </td>
-                                    )}
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{role.description}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            )
+                                        ) : null,
                                         <div className="flex justify-end gap-2">
                                             {canEdit && !isSystemAdmin && (
                                                 <button
-                                                    onClick={() => openEdit(role)}
-                                                    className={`${role.id === currentRoleId ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-900'} mx-2`}
+                                                    onClick={(e) => { e.stopPropagation(); openEdit(role); }}
+                                                    className={`${role.id === currentRoleId ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-900'}`}
                                                     disabled={role.id === currentRoleId}
                                                     title={role.id === currentRoleId ? "You cannot edit your own role" : "Edit Role & Permissions"}
                                                 >
@@ -286,22 +314,46 @@ export default function RolesClient({
                                             )}
                                             {canDelete && !isSystemAdmin && (
                                                 <button
-                                                    onClick={() => handleDelete(role.id)}
-                                                    className={`${role.id === currentRoleId ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:text-red-900'} mx-2`}
+                                                    onClick={(e) => { e.stopPropagation(); handleDelete(role.id); }}
+                                                    className={`${role.id === currentRoleId ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:text-red-900'}`}
                                                     disabled={role.id === currentRoleId}
                                                     title={role.id === currentRoleId ? "You cannot delete your own role" : "Delete Role"}
                                                 >
                                                     <Trash2 size={16} />
                                                 </button>
                                             )}
-                                            {(isSystemAdmin || role.id === currentRoleId) && (
-                                                <span className="text-[10px] text-gray-400 italic px-2">
-                                                    {isSystemAdmin ? 'System Reserved' : 'Your Role'}
+                                            {isSystemAdmin && (
+                                                <span className="text-xs text-gray-400 italic">
+                                                    System Reserved
                                                 </span>
                                             )}
                                         </div>
-                                    </td>
-                                </tr>
+                                    ].filter(Boolean)}
+                                    expandedContent={
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <ExpandedDetailSection title="Role Information">
+                                                <ExpandedDetailRow label="Name" value={role.name} />
+                                                <ExpandedDetailRow label="Description" value={fullRole?.description} />
+                                                <ExpandedDetailRow 
+                                                    label="Branch" 
+                                                    value={role.branchId ? branchMap.get(role.branchId) || "Unknown" : "Global"} 
+                                                />
+                                            </ExpandedDetailSection>
+                                            
+
+                                            <ExpandedDetailSection title="Audit Information">
+                                                <ExpandedDetailRow 
+                                                    label="Created" 
+                                                    value={fullRole?.createdAt ? `${new Date(fullRole.createdAt).toLocaleDateString()} by ${fullRole.createdByName || 'Unknown'}` : '—'} 
+                                                />
+                                                <ExpandedDetailRow 
+                                                    label="Last Updated" 
+                                                    value={fullRole?.updatedAt ? `${new Date(fullRole.updatedAt).toLocaleDateString()} by ${fullRole.updatedByName || 'Unknown'}` : '—'} 
+                                                />
+                                            </ExpandedDetailSection>
+                                        </div>
+                                    }
+                                />
                             )
                         })}
                         {roles.length === 0 && (

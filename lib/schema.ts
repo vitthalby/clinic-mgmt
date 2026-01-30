@@ -79,6 +79,9 @@ export const customers = pgTable("customers", {
     address: text("address"),
     notes: text("notes"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
 })
 
 export const appointments = pgTable("appointments", {
@@ -90,6 +93,9 @@ export const appointments = pgTable("appointments", {
     status: text("status").default("SCHEDULED"), // SCHEDULED, COMPLETED, CANCELLED, NOSHOW
     notes: text("notes"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
 })
 
 export const payments = pgTable("payments", {
@@ -101,6 +107,10 @@ export const payments = pgTable("payments", {
     method: text("method").notNull(), // CASH, UPI, CARD
     status: text("status").default("COMPLETED"), // PENDING, COMPLETED
     date: timestamp("date", { mode: "date" }).defaultNow(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
 })
 
 // --- BRANCHES ---
@@ -115,6 +125,8 @@ export const branches = pgTable("branches", {
     isActive: boolean("is_active").default(true),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
 })
 
 // --- ROLES ---
@@ -126,6 +138,8 @@ export const roles = pgTable("roles", {
     description: text("description"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
 })
 
 // --- USER-BRANCH MAPPING ---
@@ -177,6 +191,9 @@ export const features = pgTable("features", {
     // Defines which actions are valid for this feature. E.g. ["view", "edit"]
     availableActions: jsonb("available_actions").$type<string[]>().default(["view", "add", "edit", "delete"]),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
 })
 
 // --- BRANCH-FEATURE ENABLEMENT ---

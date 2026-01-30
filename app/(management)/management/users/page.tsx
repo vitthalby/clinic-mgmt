@@ -1,4 +1,4 @@
-import { getUsers } from "@/app/actions/users"
+import { getUsersMinimal, getUsers } from "@/app/actions/users"
 import UsersClient from "@/components/management/UsersClient"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
@@ -24,11 +24,15 @@ export default async function UsersPage() {
     // Get current branch from cookie
     const currentBranchId = cookies().get('clinic-branch-id')?.value
 
-    const { users: allUsers, allBranches, allRoles } = await getUsers(currentBranchId, isSuperUser)
+    // Use minimal data for initial page load
+    const minimalUsers = await getUsersMinimal(currentBranchId, isSuperUser)
+
+    // Get full data for compatibility with existing UsersClient (will refactor this later)
+    const { allBranches, allRoles } = await getUsers(currentBranchId, isSuperUser)
 
     return (
         <UsersClient
-            users={allUsers}
+            users={minimalUsers}
             allBranches={allBranches}
             allRoles={allRoles}
             adminRoleName={adminRoleName}

@@ -4,5 +4,6 @@
  * Centralized exports for reusable UI components
  */
 
-export { Alert, ActionError, FieldError } from './Alert'
-export type { AlertVariant } from './Alert'
+export * from './Alert'
+export { AuditInfo, AuditBadge } from './AuditInfo'
+export { ExpandableTableRow, ExpandedDetailRow, ExpandedDetailSection } from './ExpandableTableRow'
