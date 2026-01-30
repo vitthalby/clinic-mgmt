@@ -73,11 +73,49 @@ export const verificationTokens = pgTable(
 
 export const customers = pgTable("customers", {
     id: uuid("id").defaultRandom().primaryKey(),
-    name: text("name").notNull(),
-    email: text("email"),
-    phone: text("phone"),
-    address: text("address"),
-    notes: text("notes"),
+    
+    // Core Identity (M = Mandatory, O = Optional)
+    firstName: text("first_name").notNull(), // M
+    lastName: text("last_name").notNull(), // M
+    mobile: text("mobile").notNull(), // M - Primary contact
+    email: text("email"), // O
+    
+    // Demographics
+    dob: timestamp("dob", { mode: "date" }), // O - Date of Birth
+    gender: text("gender"), // O - Male, Female, Other
+    bloodGroup: text("blood_group"), // O - A+, A-, B+, B-, AB+, AB-, O+, O-
+    
+    // Address
+    addressLine1: text("address_line1"), // O
+    addressLine2: text("address_line2"), // O
+    city: text("city"), // O
+    state: text("state"), // O
+    pincode: text("pincode"), // O
+    
+    // Medical Information
+    medicalHistory: text("medical_history"), // O - Free text for conditions, allergies, etc.
+    allergies: text("allergies"), // O - Known allergies
+    currentMedications: text("current_medications"), // O
+    
+    // Emergency Contact
+    emergencyContactName: text("emergency_contact_name"), // O
+    emergencyContactPhone: text("emergency_contact_phone"), // O
+    emergencyContactRelation: text("emergency_contact_relation"), // O
+    
+    // Preferences & Metadata
+    preferredLanguage: text("preferred_language").default("English"), // O
+    source: text("source"), // O - Walk-in, Referral, Website, Social Media, etc.
+    referredBy: text("referred_by"), // O - Name of referrer if applicable
+    tags: jsonb("tags").$type<string[]>().default([]), // O - VIP, Senior, Insurance, etc.
+    notes: text("notes"), // O - Internal notes
+    
+    // Branch Association
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
+    
+    // Status
+    isActive: boolean("is_active").default(true),
+    
+    // Audit
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
     createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
