@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { users, userBranchRoles, branches, roles } from "@/lib/schema"
+import { users, userBranchRoles, branches, roles, staffWorkingHours, staffQualifications, staffServices, services, branchServices } from "@/lib/schema"
 import { eq, inArray, desc, and, isNull } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireAuth, requirePermission, getAdminRoleName } from "@/lib/auth-utils"
@@ -17,6 +17,32 @@ import {
 export type BranchRoleAssignment = {
     branchId: string
     roleId: string
+}
+
+export type WorkingHoursEntry = {
+    branchId: string
+    dayOfWeek: number // 0-6 (Sunday-Saturday)
+    startTime: string  // "09:00" format
+    endTime: string   // "17:00" format
+    isOff: boolean
+}
+
+export type QualificationEntry = {
+    id?: string       // For updates
+    type: string      // "degree", "certificate", "license", "specialization"
+    name: string      // e.g., "MBBS", "MD Cardiology"
+    institution?: string
+    year?: number
+    expiryDate?: string
+    documentUrl?: string
+    isVerified?: boolean
+}
+
+export type StaffServiceAssignment = {
+    branchId: string
+    serviceId: string
+    branchName?: string
+    serviceName?: string
 }
 
 export type UserMinimal = Pick<typeof users.$inferSelect, 'id' | 'name' | 'firstName' | 'lastName' | 'email' | 'role'>
@@ -41,8 +67,8 @@ export async function getUsersMinimal(branchId?: string, isSuperUser?: boolean):
 
         let allUsers: UserMinimal[] = []
 
-        if (isSuperUser && !branchId) {
-            // Super users see all users if no branch filter
+        if (isSuperUser) {
+            // Super users always see all users regardless of branch context
             allUsers = await db
                 .select({
                     id: users.id,
@@ -55,48 +81,8 @@ export async function getUsersMinimal(branchId?: string, isSuperUser?: boolean):
                 .from(users)
                 .orderBy(desc(users.email))
         } else if (branchId) {
-            if (isSuperUser) {
-                // Super user viewing a specific branch
-                const branchUsers = await db
-                    .select({
-                        id: users.id,
-                        name: users.name,
-                        firstName: users.firstName,
-                        lastName: users.lastName,
-                        email: users.email,
-                        role: users.role,
-                    })
-                    .from(users)
-                    .innerJoin(userBranchRoles, eq(users.id, userBranchRoles.userId))
-                    .where(eq(userBranchRoles.branchId, branchId))
-                    .orderBy(desc(users.email))
-
-                allUsers = branchUsers
-            } else {
-                // Non-super users only see non-admin users in their branch
-                const branchUsers = await db
-                    .select({
-                        id: users.id,
-                        name: users.name,
-                        firstName: users.firstName,
-                        lastName: users.lastName,
-                        email: users.email,
-                        role: users.role,
-                    })
-                    .from(users)
-                    .innerJoin(userBranchRoles, eq(users.id, userBranchRoles.userId))
-                    .where(
-                        and(
-                            eq(userBranchRoles.branchId, branchId),
-                            isNull(users.role) // Exclude global admins
-                        )
-                    )
-                    .orderBy(desc(users.email))
-
-                allUsers = branchUsers
-            }
-        } else if (isSuperUser) {
-            allUsers = await db
+            // Non-super users only see non-admin users in their branch
+            const branchUsers = await db
                 .select({
                     id: users.id,
                     name: users.name,
@@ -106,7 +92,16 @@ export async function getUsersMinimal(branchId?: string, isSuperUser?: boolean):
                     role: users.role,
                 })
                 .from(users)
+                .innerJoin(userBranchRoles, eq(users.id, userBranchRoles.userId))
+                .where(
+                    and(
+                        eq(userBranchRoles.branchId, branchId),
+                        isNull(users.role) // Exclude global admins
+                    )
+                )
                 .orderBy(desc(users.email))
+
+            allUsers = branchUsers
         }
 
         return allUsers
@@ -481,6 +476,249 @@ export async function getRolesForBranch(branchId: string) {
     } catch (error) {
         console.error("getRolesForBranch error:", error)
         return []
+    }
+}
+
+/**
+ * Get working hours for a staff member
+ */
+export async function getStaffWorkingHours(userId: string): Promise<WorkingHoursEntry[]> {
+    try {
+        await requireAuth()
+
+        const hours = await db
+            .select({
+                branchId: staffWorkingHours.branchId,
+                dayOfWeek: staffWorkingHours.dayOfWeek,
+                startTime: staffWorkingHours.startTime,
+                endTime: staffWorkingHours.endTime,
+                isOff: staffWorkingHours.isOff,
+            })
+            .from(staffWorkingHours)
+            .where(eq(staffWorkingHours.userId, userId))
+            .orderBy(staffWorkingHours.branchId, staffWorkingHours.dayOfWeek)
+
+        return hours.map(h => ({
+            ...h,
+            isOff: h.isOff ?? false,
+        }))
+    } catch (error) {
+        console.error("getStaffWorkingHours error:", error)
+        return []
+    }
+}
+
+/**
+ * Save working hours for a staff member
+ */
+export async function saveStaffWorkingHours(userId: string, workingHours: WorkingHoursEntry[]): Promise<ActionResult<void>> {
+    try {
+        await requirePermission("users", "edit")
+
+        // Delete existing working hours for this user
+        await db.delete(staffWorkingHours).where(eq(staffWorkingHours.userId, userId))
+
+        // Insert new working hours (only non-empty entries)
+        const validEntries = workingHours.filter(h => h.startTime && h.endTime)
+        if (validEntries.length > 0) {
+            await db.insert(staffWorkingHours).values(
+                validEntries.map(h => ({
+                    userId,
+                    branchId: h.branchId,
+                    dayOfWeek: h.dayOfWeek,
+                    startTime: h.startTime,
+                    endTime: h.endTime,
+                    isOff: h.isOff,
+                }))
+            )
+        }
+
+        revalidatePath("/management/users")
+        return success(undefined)
+    } catch (error) {
+        return handleActionError(error)
+    }
+}
+
+/**
+ * Get qualifications for a staff member
+ */
+export async function getStaffQualifications(userId: string): Promise<QualificationEntry[]> {
+    try {
+        await requireAuth()
+
+        const qualifications = await db
+            .select({
+                id: staffQualifications.id,
+                type: staffQualifications.type,
+                name: staffQualifications.name,
+                institution: staffQualifications.institution,
+                year: staffQualifications.year,
+                expiryDate: staffQualifications.expiryDate,
+                documentUrl: staffQualifications.documentUrl,
+                isVerified: staffQualifications.isVerified,
+            })
+            .from(staffQualifications)
+            .where(eq(staffQualifications.userId, userId))
+            .orderBy(desc(staffQualifications.year))
+
+        return qualifications.map(q => ({
+            ...q,
+            expiryDate: q.expiryDate ? q.expiryDate.toISOString().split('T')[0] : undefined,
+            isVerified: q.isVerified ?? false,
+        }))
+    } catch (error) {
+        console.error("getStaffQualifications error:", error)
+        return []
+    }
+}
+
+/**
+ * Save qualifications for a staff member
+ */
+export async function saveStaffQualifications(userId: string, qualifications: QualificationEntry[]): Promise<ActionResult<void>> {
+    try {
+        await requirePermission("users", "edit")
+
+        // Delete existing qualifications for this user
+        await db.delete(staffQualifications).where(eq(staffQualifications.userId, userId))
+
+        // Insert new qualifications
+        const validQualifications = qualifications.filter(q => q.name?.trim())
+        if (validQualifications.length > 0) {
+            await db.insert(staffQualifications).values(
+                validQualifications.map(q => ({
+                    userId,
+                    type: q.type,
+                    name: q.name.trim(),
+                    institution: q.institution?.trim() || null,
+                    year: q.year || null,
+                    expiryDate: q.expiryDate ? new Date(q.expiryDate) : null,
+                    documentUrl: q.documentUrl?.trim() || null,
+                    isVerified: q.isVerified ?? false,
+                }))
+            )
+        }
+
+        revalidatePath("/management/users")
+        return success(undefined)
+    } catch (error) {
+        return handleActionError(error)
+    }
+}
+
+/**
+ * Get services assigned to a staff member
+ */
+export async function getStaffServices(userId: string): Promise<StaffServiceAssignment[]> {
+    try {
+        await requireAuth()
+
+        const assignments = await db
+            .select({
+                branchId: staffServices.branchId,
+                serviceId: staffServices.serviceId,
+                branchName: branches.name,
+                serviceName: services.name,
+            })
+            .from(staffServices)
+            .innerJoin(branches, eq(staffServices.branchId, branches.id))
+            .innerJoin(services, eq(staffServices.serviceId, services.id))
+            .where(eq(staffServices.userId, userId))
+
+        return assignments
+    } catch (error) {
+        console.error("getStaffServices error:", error)
+        return []
+    }
+}
+
+/**
+ * Get services available for a staff member at a specific branch
+ * (Services that are enabled at the branch)
+ */
+export async function getAvailableServicesForStaffBranch(branchId: string) {
+    try {
+        await requireAuth()
+
+        const result = await db
+            .select({
+                serviceId: branchServices.serviceId,
+                serviceName: services.name,
+                serviceCode: services.code,
+                serviceCategory: services.category,
+            })
+            .from(branchServices)
+            .innerJoin(services, eq(branchServices.serviceId, services.id))
+            .where(
+                and(
+                    eq(branchServices.branchId, branchId),
+                    eq(branchServices.isActive, true),
+                    eq(services.isActive, true)
+                )
+            )
+            .orderBy(services.name)
+
+        return result
+    } catch (error) {
+        console.error("getAvailableServicesForStaffBranch error:", error)
+        return []
+    }
+}
+
+/**
+ * Save staff service assignments
+ */
+export async function saveStaffServices(userId: string, assignments: StaffServiceAssignment[]): Promise<ActionResult<void>> {
+    try {
+        await requirePermission("users", "edit")
+
+        // Delete existing staff service assignments for this user
+        await db.delete(staffServices).where(eq(staffServices.userId, userId))
+
+        // Insert new assignments
+        if (assignments.length > 0) {
+            await db.insert(staffServices).values(
+                assignments.map(a => ({
+                    userId,
+                    branchId: a.branchId,
+                    serviceId: a.serviceId,
+                }))
+            )
+        }
+
+        revalidatePath("/management/users")
+        return success(undefined)
+    } catch (error) {
+        return handleActionError(error)
+    }
+}
+
+/**
+ * Get extended user details including qualifications and services
+ */
+export async function getUserExtendedDetails(userId: string) {
+    try {
+        await requireAuth()
+
+        const [user, workingHours, qualifications, serviceAssignments] = await Promise.all([
+            getUserDetails(userId),
+            getStaffWorkingHours(userId),
+            getStaffQualifications(userId),
+            getStaffServices(userId),
+        ])
+
+        if (!user) return null
+
+        return {
+            ...user,
+            workingHours,
+            qualifications,
+            staffServices: serviceAssignments,
+        }
+    } catch (error) {
+        console.error("getUserExtendedDetails error:", error)
+        return null
     }
 }
 

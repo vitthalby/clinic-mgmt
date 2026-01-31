@@ -275,3 +275,126 @@ export const roleFeaturePermissions = pgTable(
         pk: primaryKey({ columns: [t.roleId, t.featureId] }),
     })
 )
+
+// --- SERVICES (Master Catalog) ---
+// Master list of all services the clinic offers (e.g., "General Consultation", "X-Ray")
+export const services = pgTable("services", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    code: text("code").unique(), // Optional short code like "GC", "XRAY"
+    description: text("description"),
+    category: text("category"), // e.g., "Consultation", "Diagnostic", "Treatment"
+    defaultDuration: integer("default_duration").default(30), // Duration in minutes
+    defaultPrice: integer("default_price"), // Default price in smallest currency unit (cents/paisa)
+    isActive: boolean("is_active").default(true),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+})
+
+// --- BRANCH OPERATING HOURS ---
+// Operating hours for each branch per day of week
+export const branchOperatingHours = pgTable(
+    "branch_operating_hours",
+    {
+        branchId: uuid("branch_id")
+            .notNull()
+            .references(() => branches.id, { onDelete: "cascade" }),
+        dayOfWeek: integer("day_of_week").notNull(), // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+        openTime: text("open_time").notNull(), // "09:00" format
+        closeTime: text("close_time").notNull(), // "18:00" format
+        isClosed: boolean("is_closed").default(false), // If true, branch is closed this day
+        createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+        updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+    },
+    (t) => ({
+        // One entry per branch per day
+        pk: primaryKey({ columns: [t.branchId, t.dayOfWeek] }),
+    })
+)
+
+// --- BRANCH SERVICES ---
+// Services offered at each branch (subset of master services with optional branch-specific pricing)
+export const branchServices = pgTable(
+    "branch_services",
+    {
+        branchId: uuid("branch_id")
+            .notNull()
+            .references(() => branches.id, { onDelete: "cascade" }),
+        serviceId: uuid("service_id")
+            .notNull()
+            .references(() => services.id, { onDelete: "cascade" }),
+        price: integer("price"), // Branch-specific price (null = use default from services)
+        duration: integer("duration"), // Branch-specific duration (null = use default)
+        isActive: boolean("is_active").default(true),
+        createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+        updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+    },
+    (t) => ({
+        pk: primaryKey({ columns: [t.branchId, t.serviceId] }),
+    })
+)
+
+// --- STAFF WORKING HOURS ---
+// Working hours for each staff member per day of week
+export const staffWorkingHours = pgTable(
+    "staff_working_hours",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        branchId: uuid("branch_id")
+            .notNull()
+            .references(() => branches.id, { onDelete: "cascade" }),
+        dayOfWeek: integer("day_of_week").notNull(), // 0 = Sunday, ..., 6 = Saturday
+        startTime: text("start_time").notNull(), // "09:00" format
+        endTime: text("end_time").notNull(), // "17:00" format
+        isOff: boolean("is_off").default(false), // If true, staff is off this day
+        createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+        updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+    },
+    (t) => ({
+        // One entry per user per branch per day
+        pk: primaryKey({ columns: [t.userId, t.branchId, t.dayOfWeek] }),
+    })
+)
+
+// --- STAFF QUALIFICATIONS ---
+// Qualifications, degrees, certificates for staff
+export const staffQualifications = pgTable("staff_qualifications", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+        .notNull()
+        .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(), // "degree", "certificate", "license", "specialization"
+    name: text("name").notNull(), // e.g., "MBBS", "MD Cardiology", "RN License"
+    institution: text("institution"), // e.g., "AIIMS Delhi"
+    year: integer("year"), // Year of completion/issue
+    expiryDate: timestamp("expiry_date", { mode: "date" }), // For licenses/certificates that expire
+    documentUrl: text("document_url"), // Link to uploaded document
+    isVerified: boolean("is_verified").default(false),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+})
+
+// --- STAFF SERVICES ---
+// Services a staff member can provide at a specific branch
+export const staffServices = pgTable(
+    "staff_services",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        branchId: uuid("branch_id")
+            .notNull()
+            .references(() => branches.id, { onDelete: "cascade" }),
+        serviceId: uuid("service_id")
+            .notNull()
+            .references(() => services.id, { onDelete: "cascade" }),
+        createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    },
+    (t) => ({
+        pk: primaryKey({ columns: [t.userId, t.branchId, t.serviceId] }),
+    })
+)

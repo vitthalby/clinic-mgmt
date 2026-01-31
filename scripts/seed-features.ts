@@ -12,6 +12,7 @@ const featureList = [
     { key: "branches", name: "Branches", description: "Manage clinic branches", actions: ["view", "add", "edit", "delete"] },
     { key: "users", name: "Staff Management", description: "Manage staff and users", actions: ["view", "add", "edit", "delete"] },
     { key: "roles", name: "Roles", description: "Manage roles and permissions", actions: ["view", "add", "edit", "delete"] },
+    { key: "services", name: "Services", description: "Manage master service catalog", actions: ["view", "add", "edit", "delete"] },
     { key: "settings", name: "Settings", description: "Application settings", actions: ["view", "edit"] },
 ]
 

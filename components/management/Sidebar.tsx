@@ -12,7 +12,8 @@ import {
     LogOut,
     Building2,
     Briefcase,
-    ShieldCheck
+    ShieldCheck,
+    Stethoscope
 } from "lucide-react"
 import { siteConfig } from "@/config/site"
 import { signOut } from "next-auth/react"
@@ -27,6 +28,7 @@ const navigation = [
     { name: "Branches", href: "/management/branches", icon: Building2, key: "branches" },
     { name: "Staff Management", href: "/management/users", icon: Briefcase, key: "users" },
     { name: "Roles", href: "/management/roles", icon: ShieldCheck, key: "roles" },
+    { name: "Services", href: "/management/services", icon: Stethoscope, key: "services" },
     { name: "Settings", href: "/management/settings", icon: Settings, key: "settings" },
 ]
 

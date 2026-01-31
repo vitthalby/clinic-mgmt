@@ -38,8 +38,8 @@ export function useExpandableTable<TMinimal extends { id: string }, TExpandedDat
         }
     }, [fetchList, fetchExpandedData, expandedData])
 
-    const loadExpandedData = useCallback(async (id: string, force: boolean = false) => {
-        if (expandedData[id] && !force) return
+    const loadExpandedData = useCallback(async (id: string, force: boolean = false): Promise<TExpandedData | null> => {
+        if (expandedData[id] && !force) return expandedData[id]
         
         setLoadingDetails(prev => ({ ...prev, [id]: true }))
         try {
@@ -47,6 +47,7 @@ export function useExpandableTable<TMinimal extends { id: string }, TExpandedDat
             if (data) {
                 setExpandedData(prev => ({ ...prev, [id]: data }))
             }
+            return data
         } finally {
             setLoadingDetails(prev => ({ ...prev, [id]: false }))
         }

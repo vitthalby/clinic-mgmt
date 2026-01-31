@@ -38,6 +38,7 @@ export default async function UsersPage() {
             adminRoleName={adminRoleName}
             isSuperUser={isSuperUser}
             currentUserId={currentUserId}
+            currentBranchId={currentBranchId}
         />
     )
 }

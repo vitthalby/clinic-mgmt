@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { branches, userBranchRoles, branchFeatures, features, users } from "@/lib/schema"
+import { branches, userBranchRoles, branchFeatures, features, users, branchOperatingHours, branchServices, services } from "@/lib/schema"
 import { eq, desc, inArray, and } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
@@ -17,6 +17,20 @@ import {
 export type FeatureAssignment = {
     featureId: string
     isEnabled: boolean
+}
+
+export type OperatingHoursEntry = {
+    dayOfWeek: number // 0-6 (Sunday-Saturday)
+    openTime: string  // "09:00" format
+    closeTime: string // "18:00" format
+    isClosed: boolean
+}
+
+export type BranchServiceAssignment = {
+    serviceId: string
+    price?: number | null    // Branch-specific price in cents/paisa (null = use default)
+    duration?: number | null // Branch-specific duration in minutes (null = use default)
+    isActive: boolean
 }
 
 /**
@@ -83,7 +97,7 @@ export async function getBranches() {
 }
 
 /**
- * Create a new branch with optional feature assignments
+ * Create a new branch with optional feature assignments, operating hours, and services
  */
 export async function createBranch(data: {
     name: string
@@ -93,6 +107,8 @@ export async function createBranch(data: {
     pinCode?: string
     state?: string
     featureAssignments?: FeatureAssignment[]
+    operatingHours?: OperatingHoursEntry[]
+    branchServices?: BranchServiceAssignment[]
 }): Promise<ActionResult<{ id: string }>> {
     try {
         // Require permission to add branches
@@ -129,6 +145,32 @@ export async function createBranch(data: {
             )
         }
 
+        // Save operating hours if provided
+        if (data.operatingHours && data.operatingHours.length > 0) {
+            await db.insert(branchOperatingHours).values(
+                data.operatingHours.map((oh) => ({
+                    branchId: newBranch.id,
+                    dayOfWeek: oh.dayOfWeek,
+                    openTime: oh.openTime,
+                    closeTime: oh.closeTime,
+                    isClosed: oh.isClosed,
+                }))
+            )
+        }
+
+        // Assign branch services if provided
+        if (data.branchServices && data.branchServices.length > 0) {
+            await db.insert(branchServices).values(
+                data.branchServices.map((bs) => ({
+                    branchId: newBranch.id,
+                    serviceId: bs.serviceId,
+                    price: bs.price,
+                    duration: bs.duration,
+                    isActive: bs.isActive,
+                }))
+            )
+        }
+
         revalidatePath("/management/branches")
         return success({ id: newBranch.id })
     } catch (error) {
@@ -137,7 +179,7 @@ export async function createBranch(data: {
 }
 
 /**
- * Update an existing branch with optional feature assignments
+ * Update an existing branch with optional feature assignments, operating hours, and services
  */
 export async function updateBranch(
     id: string,
@@ -150,6 +192,8 @@ export async function updateBranch(
         state?: string
         isActive?: boolean
         featureAssignments?: FeatureAssignment[]
+        operatingHours?: OperatingHoursEntry[]
+        branchServices?: BranchServiceAssignment[]
     }
 ): Promise<ActionResult<void>> {
     try {
@@ -190,6 +234,44 @@ export async function updateBranch(
                         branchId: id,
                         featureId: fa.featureId,
                         isEnabled: fa.isEnabled,
+                    }))
+                )
+            }
+        }
+
+        // Update operating hours if provided
+        if (data.operatingHours !== undefined) {
+            // Remove existing hours
+            await db.delete(branchOperatingHours).where(eq(branchOperatingHours.branchId, id))
+
+            // Add new hours
+            if (data.operatingHours.length > 0) {
+                await db.insert(branchOperatingHours).values(
+                    data.operatingHours.map((oh) => ({
+                        branchId: id,
+                        dayOfWeek: oh.dayOfWeek,
+                        openTime: oh.openTime,
+                        closeTime: oh.closeTime,
+                        isClosed: oh.isClosed,
+                    }))
+                )
+            }
+        }
+
+        // Update branch services if provided
+        if (data.branchServices !== undefined) {
+            // Remove existing services
+            await db.delete(branchServices).where(eq(branchServices.branchId, id))
+
+            // Add new services
+            if (data.branchServices.length > 0) {
+                await db.insert(branchServices).values(
+                    data.branchServices.map((bs) => ({
+                        branchId: id,
+                        serviceId: bs.serviceId,
+                        price: bs.price,
+                        duration: bs.duration,
+                        isActive: bs.isActive,
                     }))
                 )
             }
@@ -384,5 +466,108 @@ export async function deleteBranch(id: string): Promise<ActionResult<void>> {
         return success(undefined)
     } catch (error) {
         return handleActionError(error)
+    }
+}
+
+/**
+ * Get operating hours for a branch
+ */
+export async function getBranchOperatingHours(branchId: string): Promise<OperatingHoursEntry[]> {
+    try {
+        await requireAuth()
+
+        const hours = await db
+            .select({
+                dayOfWeek: branchOperatingHours.dayOfWeek,
+                openTime: branchOperatingHours.openTime,
+                closeTime: branchOperatingHours.closeTime,
+                isClosed: branchOperatingHours.isClosed,
+            })
+            .from(branchOperatingHours)
+            .where(eq(branchOperatingHours.branchId, branchId))
+            .orderBy(branchOperatingHours.dayOfWeek)
+
+        return hours.map(h => ({
+            ...h,
+            isClosed: h.isClosed ?? false,
+        }))
+    } catch (error) {
+        console.error("getBranchOperatingHours error:", error)
+        return []
+    }
+}
+
+/**
+ * Get services assigned to a branch
+ */
+export async function getBranchServices(branchId: string) {
+    try {
+        await requireAuth()
+
+        const result = await db
+            .select({
+                serviceId: branchServices.serviceId,
+                serviceName: services.name,
+                serviceCode: services.code,
+                serviceCategory: services.category,
+                defaultPrice: services.defaultPrice,
+                defaultDuration: services.defaultDuration,
+                branchPrice: branchServices.price,
+                branchDuration: branchServices.duration,
+                isActive: branchServices.isActive,
+            })
+            .from(branchServices)
+            .innerJoin(services, eq(branchServices.serviceId, services.id))
+            .where(eq(branchServices.branchId, branchId))
+            .orderBy(services.name)
+
+        return result.map(r => ({
+            ...r,
+            isActive: r.isActive ?? true,
+        }))
+    } catch (error) {
+        console.error("getBranchServices error:", error)
+        return []
+    }
+}
+
+/**
+ * Get active services for a branch (for appointments and staff assignment)
+ */
+export async function getActiveBranchServices(branchId: string) {
+    try {
+        await requireAuth()
+
+        const result = await db
+            .select({
+                serviceId: branchServices.serviceId,
+                serviceName: services.name,
+                serviceCode: services.code,
+                serviceCategory: services.category,
+                price: branchServices.price,
+                duration: branchServices.duration,
+                defaultPrice: services.defaultPrice,
+                defaultDuration: services.defaultDuration,
+            })
+            .from(branchServices)
+            .innerJoin(services, eq(branchServices.serviceId, services.id))
+            .where(
+                and(
+                    eq(branchServices.branchId, branchId),
+                    eq(branchServices.isActive, true),
+                    eq(services.isActive, true)
+                )
+            )
+            .orderBy(services.name)
+
+        return result.map(r => ({
+            ...r,
+            // Use branch-specific price/duration if set, otherwise default
+            effectivePrice: r.price ?? r.defaultPrice,
+            effectiveDuration: r.duration ?? r.defaultDuration,
+        }))
+    } catch (error) {
+        console.error("getActiveBranchServices error:", error)
+        return []
     }
 }

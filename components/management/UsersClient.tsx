@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { createUser, updateUser, deleteUser, getRolesForBranch, getUserDetails, getUsersMinimal, BranchRoleAssignment } from "@/app/actions/users"
-import { Shield, Building, Edit2, Plus, Trash2 } from "lucide-react"
+import { createUser, updateUser, deleteUser, getRolesForBranch, getUserDetails, getUsersMinimal, BranchRoleAssignment, getStaffQualifications, getStaffWorkingHours, getStaffServices, saveStaffQualifications, saveStaffWorkingHours, saveStaffServices, getAvailableServicesForStaffBranch, QualificationEntry, WorkingHoursEntry, StaffServiceAssignment } from "@/app/actions/users"
+import { Shield, Building, Edit2, Plus, Trash2, Clock, GraduationCap, Stethoscope } from "lucide-react"
 import { useExpandableTable } from "@/hooks/useExpandableTable"
 import { ExpandableTableRow, ExpandedDetailRow, ExpandedDetailSection } from "@/components/ui"
 import type { AuditDisplayInfo } from "@/types/audit"
@@ -28,7 +28,11 @@ type UserFull = UserMinimal & {
     }>
 }
 
-type UserExpandedData = UserFull
+type UserExpandedData = UserFull & {
+    qualifications?: QualificationEntry[]
+    workingHours?: WorkingHoursEntry[]
+    staffServices?: StaffServiceAssignment[]
+}
 
 type User = UserMinimal
 
@@ -44,6 +48,30 @@ type Role = {
     branchId: string | null
 }
 
+type BranchService = {
+    serviceId: string
+    serviceName: string
+    serviceCode: string | null
+    serviceCategory: string | null
+}
+
+const DAYS_OF_WEEK = [
+    { value: 0, label: "Sunday" },
+    { value: 1, label: "Monday" },
+    { value: 2, label: "Tuesday" },
+    { value: 3, label: "Wednesday" },
+    { value: 4, label: "Thursday" },
+    { value: 5, label: "Friday" },
+    { value: 6, label: "Saturday" },
+]
+
+const QUALIFICATION_TYPES = [
+    { value: "degree", label: "Degree" },
+    { value: "certificate", label: "Certificate" },
+    { value: "license", label: "License" },
+    { value: "specialization", label: "Specialization" },
+]
+
 interface UsersClientProps {
     users: User[]
     allBranches: Branch[]
@@ -51,6 +79,7 @@ interface UsersClientProps {
     adminRoleName: string
     isSuperUser?: boolean
     currentUserId?: string
+    currentBranchId?: string
 }
 
 type BranchRoleFormEntry = {
@@ -66,8 +95,26 @@ export default function UsersClient({
     allRoles,
     adminRoleName,
     isSuperUser = false,
-    currentUserId = ""
+    currentUserId = "",
+    currentBranchId
 }: UsersClientProps) {
+    // Fetch extended user data including qualifications, working hours, and services
+    const fetchUserExtendedData = async (userId: string): Promise<UserExpandedData | null> => {
+        const [userDetails, qualifications, workingHours, staffServicesData] = await Promise.all([
+            getUserDetails(userId),
+            getStaffQualifications(userId),
+            getStaffWorkingHours(userId),
+            getStaffServices(userId),
+        ])
+        if (!userDetails) return null
+        return {
+            ...userDetails,
+            qualifications,
+            workingHours,
+            staffServices: staffServicesData,
+        }
+    }
+
     const {
         items: users,
         expandedData,
@@ -76,14 +123,15 @@ export default function UsersClient({
         loadExpandedData,
     } = useExpandableTable<User, UserExpandedData>({
         initialData: initialUsers,
-        fetchList: () => getUsersMinimal(undefined, isSuperUser), // TODO: Add branch filtering
-        fetchExpandedData: getUserDetails,
+        fetchList: () => getUsersMinimal(currentBranchId, isSuperUser),
+        fetchExpandedData: fetchUserExtendedData,
     })
 
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingUser, setEditingUser] = useState<User | null>(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [activeTab, setActiveTab] = useState<"details" | "qualifications" | "hours" | "services">("details")
 
     // Form State
     const [formData, setFormData] = useState({
@@ -95,16 +143,26 @@ export default function UsersClient({
         isAdmin: false,
     })
 
+    // Qualifications state
+    const [qualifications, setQualifications] = useState<QualificationEntry[]>([])
+    
+    // Working hours state
+    const [workingHours, setWorkingHours] = useState<WorkingHoursEntry[]>([])
+    
+    // Staff services state
+    const [staffServiceAssignments, setStaffServiceAssignments] = useState<Record<string, string[]>>({}) // branchId -> serviceId[]
+    const [branchServicesMap, setBranchServicesMap] = useState<Record<string, BranchService[]>>({}) // branchId -> available services
+
     // Branch-Role assignment state for super user view
     const [branchRoleEntries, setBranchRoleEntries] = useState<BranchRoleFormEntry[]>([])
 
     // Initialize branch-role entries when modal opens
-    const initializeBranchRoleEntries = async (user?: User) => {
+    const initializeBranchRoleEntries = async (user?: UserExpandedData | null) => {
         const entries: BranchRoleFormEntry[] = []
 
         for (const branch of allBranches) {
             // Find if user is assigned to this branch
-            const existingAssignment = user?.branches.find(b => b.id === branch.id)
+            const existingAssignment = user?.branches?.find(b => b.id === branch.id)
 
             // Get roles available for this branch
             const branchRoles = allRoles.filter(r =>
@@ -132,7 +190,21 @@ export default function UsersClient({
             isAdmin: false,
         })
         setBranchRoleEntries([])
+        setQualifications([])
+        setWorkingHours([])
+        setStaffServiceAssignments({})
+        setBranchServicesMap({})
+        setActiveTab("details")
         setError(null)
+    }
+
+    const loadBranchServices = async (branchIds: string[]) => {
+        const servicesMap: Record<string, BranchService[]> = {}
+        for (const branchId of branchIds) {
+            const services = await getAvailableServicesForStaffBranch(branchId)
+            servicesMap[branchId] = services
+        }
+        setBranchServicesMap(servicesMap)
     }
 
     const openCreate = () => {
@@ -145,10 +217,10 @@ export default function UsersClient({
     const openEdit = async (user: User) => {
         setEditingUser(user)
         setIsModalOpen(true)
+        setActiveTab("details")
         
-        // Load full user details if not already loaded
-        await loadExpandedData(user.id)
-        const fullUser = expandedData[user.id]
+        // Load full user details - use the returned data directly instead of reading from state
+        const fullUser = await loadExpandedData(user.id, true) as UserExpandedData | null
         
         const isAdmin = user.role === adminRoleName
         setFormData({
@@ -159,10 +231,40 @@ export default function UsersClient({
             dob: fullUser?.dob ? new Date(fullUser.dob).toISOString().split('T')[0] : "",
             isAdmin: isAdmin,
         })
-        if (!isAdmin) {
-            initializeBranchRoleEntries(fullUser || user)
+        
+        if (!isAdmin && fullUser) {
+            await initializeBranchRoleEntries(fullUser)
+            
+            // Load qualifications
+            if (fullUser.qualifications) {
+                setQualifications(fullUser.qualifications)
+            }
+            
+            // Load working hours
+            if (fullUser.workingHours) {
+                setWorkingHours(fullUser.workingHours)
+            }
+            
+            // Load staff services
+            if (fullUser.staffServices) {
+                const serviceMap: Record<string, string[]> = {}
+                fullUser.staffServices.forEach(s => {
+                    if (!serviceMap[s.branchId]) serviceMap[s.branchId] = []
+                    serviceMap[s.branchId].push(s.serviceId)
+                })
+                setStaffServiceAssignments(serviceMap)
+            }
+            
+            // Load available services for each branch
+            const branchIds = fullUser.branches?.map(b => b.id) || []
+            if (branchIds.length > 0) {
+                await loadBranchServices(branchIds)
+            }
+        } else if (!isAdmin) {
+            // User has no existing data, initialize empty branch entries
+            await initializeBranchRoleEntries(null)
         }
-        setIsModalOpen(true)
+        
         setError(null)
     }
 
@@ -203,10 +305,34 @@ export default function UsersClient({
                 branchRoleAssignments: formData.isAdmin ? undefined : branchRoleAssignments,
             }
 
+            let userId: string
             if (editingUser) {
                 await updateUser(editingUser.id, userData)
+                userId = editingUser.id
             } else {
-                await createUser(userData)
+                const result = await createUser(userData)
+                if (!result.success || !result.data?.id) {
+                    throw new Error(result.error || "Failed to create user")
+                }
+                userId = result.data.id
+            }
+            
+            // Save qualifications, working hours, and services for non-admin users
+            if (!formData.isAdmin && userId) {
+                // Save qualifications
+                await saveStaffQualifications(userId, qualifications)
+                
+                // Save working hours
+                await saveStaffWorkingHours(userId, workingHours)
+                
+                // Save staff services
+                const allStaffServices: { branchId: string; serviceId: string }[] = []
+                Object.entries(staffServiceAssignments).forEach(([branchId, serviceIds]) => {
+                    serviceIds.forEach(serviceId => {
+                        allStaffServices.push({ branchId, serviceId })
+                    })
+                })
+                await saveStaffServices(userId, allStaffServices)
             }
             
             // Refresh users list
@@ -253,6 +379,75 @@ export default function UsersClient({
                     : entry
             )
         )
+    }
+
+    // Qualification helpers
+    const addQualification = () => {
+        setQualifications(prev => [...prev, {
+            type: "certification",
+            name: "",
+            institution: "",
+            year: new Date().getFullYear(),
+        }])
+    }
+
+    const updateQualification = (index: number, field: keyof QualificationEntry, value: any) => {
+        setQualifications(prev => prev.map((q, i) => 
+            i === index ? { ...q, [field]: value } : q
+        ))
+    }
+
+    const removeQualification = (index: number) => {
+        setQualifications(prev => prev.filter((_, i) => i !== index))
+    }
+
+    // Working hours helpers
+    const addWorkingHourEntry = () => {
+        const enabledBranches = branchRoleEntries.filter(e => e.enabled)
+        if (enabledBranches.length === 0) return
+        
+        setWorkingHours(prev => [...prev, {
+            branchId: enabledBranches[0].branchId,
+            dayOfWeek: 1,
+            startTime: "09:00",
+            endTime: "17:00",
+            isOff: false,
+        }])
+    }
+
+    const updateWorkingHour = (index: number, field: keyof WorkingHoursEntry, value: any) => {
+        setWorkingHours(prev => prev.map((w, i) => 
+            i === index ? { ...w, [field]: value } : w
+        ))
+    }
+
+    const removeWorkingHour = (index: number) => {
+        setWorkingHours(prev => prev.filter((_, i) => i !== index))
+    }
+
+    // Staff service assignment helpers
+    const toggleStaffService = (branchId: string, serviceId: string) => {
+        setStaffServiceAssignments(prev => {
+            const current = prev[branchId] || []
+            const isSelected = current.includes(serviceId)
+            return {
+                ...prev,
+                [branchId]: isSelected
+                    ? current.filter(id => id !== serviceId)
+                    : [...current, serviceId]
+            }
+        })
+    }
+
+    // Handle branch selection change for staff - reload available services
+    const handleBranchToggle = async (branchId: string) => {
+        toggleBranchEnabled(branchId)
+        
+        // Load services for the branch if enabling
+        const entry = branchRoleEntries.find(e => e.branchId === branchId)
+        if (entry && !entry.enabled && !branchServicesMap[branchId]) {
+            await loadBranchServices([branchId])
+        }
     }
 
     const branchMap = new Map(allBranches.map(b => [b.id, b.name]))
@@ -381,6 +576,37 @@ export default function UsersClient({
                                                     <ExpandedDetailRow label="Assignments" value="No branch assignments" />
                                                 )}
                                             </ExpandedDetailSection>
+                                            
+                                            {!isAdmin && fullUser?.qualifications && fullUser.qualifications.length > 0 && (
+                                                <ExpandedDetailSection title="Qualifications">
+                                                    {fullUser.qualifications.map((q, idx) => (
+                                                        <ExpandedDetailRow 
+                                                            key={idx}
+                                                            label={q.type.charAt(0).toUpperCase() + q.type.slice(1)} 
+                                                            value={`${q.name}${q.institution ? ` - ${q.institution}` : ''}${q.year ? ` (${q.year})` : ''}`}
+                                                        />
+                                                    ))}
+                                                </ExpandedDetailSection>
+                                            )}
+                                            
+                                            {!isAdmin && fullUser?.staffServices && fullUser.staffServices.length > 0 && (
+                                                <ExpandedDetailSection title="Services Offered">
+                                                    {(() => {
+                                                        const servicesByBranch: Record<string, string[]> = {}
+                                                        fullUser.staffServices.forEach(s => {
+                                                            if (!servicesByBranch[s.branchName]) servicesByBranch[s.branchName] = []
+                                                            servicesByBranch[s.branchName].push(s.serviceName)
+                                                        })
+                                                        return Object.entries(servicesByBranch).map(([branchName, services]) => (
+                                                            <ExpandedDetailRow 
+                                                                key={branchName}
+                                                                label={branchName} 
+                                                                value={services.join(', ')}
+                                                            />
+                                                        ))
+                                                    })()}
+                                                </ExpandedDetailSection>
+                                            )}
                                         </div>
                                     }
                                 />
@@ -399,164 +625,493 @@ export default function UsersClient({
 
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg p-6 max-w-2xl w-full shadow-xl max-h-[90vh] overflow-y-auto">
+                    <div className="bg-white rounded-lg p-6 max-w-3xl w-full shadow-xl max-h-[90vh] overflow-y-auto">
                         <h2 className="text-xl font-bold mb-4 text-gray-900">{editingUser ? "Edit User" : "Add New User"}</h2>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-
-                            {/* Personal Details */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700">First Name</label>
-                                    <input
-                                        type="text"
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                        value={formData.firstName}
-                                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700">Last Name</label>
-                                    <input
-                                        type="text"
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                        value={formData.lastName}
-                                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                                    />
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700">Email (Login ID)</label>
-                                    <input
-                                        type="email"
-                                        required
-                                        disabled={!!editingUser}
-                                        className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 ${editingUser ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                                        value={formData.email}
-                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700">Mobile</label>
-                                    <input
-                                        type="text"
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                        value={formData.mobile}
-                                        onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
-                                    <input
-                                        type="date"
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                        value={formData.dob}
-                                        onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-
-                            <hr className="my-4" />
-
-                            {/* Admin Toggle (Super User Only) */}
-                            {isSuperUser && (
-                                <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-md border border-purple-100">
-                                    <input
-                                        id="isAdmin"
-                                        type="checkbox"
-                                        className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
-                                        checked={formData.isAdmin}
-                                        onChange={(e) => {
-                                            setFormData({ ...formData, isAdmin: e.target.checked })
-                                            if (e.target.checked) {
-                                                setBranchRoleEntries([])
-                                            } else {
-                                                initializeBranchRoleEntries(editingUser || undefined)
-                                            }
-                                        }}
-                                    />
-                                    <label htmlFor="isAdmin" className="text-sm font-medium text-purple-800">
-                                        <Shield size={16} className="inline mr-1" />
-                                        Grant Super Admin Access
-                                    </label>
-                                    <span className="text-xs text-purple-600 ml-auto">Full access to all branches</span>
-                                </div>
-                            )}
-
-                            {/* Branch-Role Assignment (Super User Matrix or Simple Dropdown) */}
+                        
+                        {/* Tab Navigation */}
+                        <div className="flex border-b border-gray-200 mb-4">
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab("details")}
+                                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                                    activeTab === "details" 
+                                        ? "border-indigo-500 text-indigo-600" 
+                                        : "border-transparent text-gray-500 hover:text-gray-700"
+                                }`}
+                            >
+                                Details
+                            </button>
                             {!formData.isAdmin && (
-                                <div>
-                                    <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                                        {isSuperUser ? <Building size={16} className="mr-1" /> : <Shield size={16} className="mr-1" />}
-                                        {isSuperUser ? "Assign Branches & Roles" : "Assign Role"}
-                                        <span className="ml-1 text-red-500 text-xs font-bold">*Required</span>
-                                    </label>
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveTab("qualifications")}
+                                        className={`flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                                            activeTab === "qualifications" 
+                                                ? "border-indigo-500 text-indigo-600" 
+                                                : "border-transparent text-gray-500 hover:text-gray-700"
+                                        }`}
+                                    >
+                                        <GraduationCap size={16} />
+                                        Qualifications
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveTab("workingHours")}
+                                        className={`flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                                            activeTab === "workingHours" 
+                                                ? "border-indigo-500 text-indigo-600" 
+                                                : "border-transparent text-gray-500 hover:text-gray-700"
+                                        }`}
+                                    >
+                                        <Clock size={16} />
+                                        Working Hours
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveTab("services")}
+                                        className={`flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                                            activeTab === "services" 
+                                                ? "border-indigo-500 text-indigo-600" 
+                                                : "border-transparent text-gray-500 hover:text-gray-700"
+                                        }`}
+                                    >
+                                        <Stethoscope size={16} />
+                                        Services
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                        
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            {/* Details Tab */}
+                            {activeTab === "details" && (
+                                <div className="space-y-4">
+                                    {/* Personal Details */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">First Name</label>
+                                            <input
+                                                type="text"
+                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                                value={formData.firstName}
+                                                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Last Name</label>
+                                            <input
+                                                type="text"
+                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                                value={formData.lastName}
+                                                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="block text-sm font-medium text-gray-700">Email (Login ID)</label>
+                                            <input
+                                                type="email"
+                                                required
+                                                disabled={!!editingUser}
+                                                className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 ${editingUser ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                value={formData.email}
+                                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Mobile</label>
+                                            <input
+                                                type="text"
+                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                                value={formData.mobile}
+                                                onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
+                                            <input
+                                                type="date"
+                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                                value={formData.dob}
+                                                onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
 
-                                    {isSuperUser ? (
-                                        <div className={`border rounded-md p-3 bg-gray-50 space-y-2 ${branchRoleEntries.filter(e => e.enabled).length === 0 ? 'border-red-200 ring-1 ring-red-100' : ''}`}>
-                                            {allBranches.length === 0 ? (
-                                                <p className="text-gray-500 italic">No branches available.</p>
+                                    <hr className="my-4" />
+
+                                    {/* Admin Toggle (Super User Only) */}
+                                    {isSuperUser && (
+                                        <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-md border border-purple-100">
+                                            <input
+                                                id="isAdmin"
+                                                type="checkbox"
+                                                className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                                                checked={formData.isAdmin}
+                                                onChange={(e) => {
+                                                    setFormData({ ...formData, isAdmin: e.target.checked })
+                                                    if (e.target.checked) {
+                                                        setBranchRoleEntries([])
+                                                    } else {
+                                                        const fullUser = editingUser ? expandedData[editingUser.id] : null
+                                                        initializeBranchRoleEntries(fullUser)
+                                                    }
+                                                }}
+                                            />
+                                            <label htmlFor="isAdmin" className="text-sm font-medium text-purple-800">
+                                                <Shield size={16} className="inline mr-1" />
+                                                Grant Super Admin Access
+                                            </label>
+                                            <span className="text-xs text-purple-600 ml-auto">Full access to all branches</span>
+                                        </div>
+                                    )}
+
+                                    {/* Branch-Role Assignment (Super User Matrix or Simple Dropdown) */}
+                                    {!formData.isAdmin && (
+                                        <div>
+                                            <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+                                                {isSuperUser ? <Building size={16} className="mr-1" /> : <Shield size={16} className="mr-1" />}
+                                                {isSuperUser ? "Assign Branches & Roles" : "Assign Role"}
+                                                <span className="ml-1 text-red-500 text-xs font-bold">*Required</span>
+                                            </label>
+
+                                            {isSuperUser ? (
+                                                <div className={`border rounded-md p-3 bg-gray-50 space-y-2 ${branchRoleEntries.filter(e => e.enabled).length === 0 ? 'border-red-200 ring-1 ring-red-100' : ''}`}>
+                                                    {allBranches.length === 0 ? (
+                                                        <p className="text-gray-500 italic">No branches available.</p>
+                                                    ) : (
+                                                        allBranches.map(branch => {
+                                                            const entry = branchRoleEntries.find(e => e.branchId === branch.id)
+                                                            if (!entry) return null
+
+                                                            return (
+                                                                <div key={branch.id} className={`flex items-center gap-3 p-2 rounded ${entry.enabled ? 'bg-white border border-indigo-100' : ''}`}>
+                                                                    <input
+                                                                        id={`branch-${branch.id}`}
+                                                                        type="checkbox"
+                                                                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                                                        checked={entry.enabled}
+                                                                        onChange={() => handleBranchToggle(branch.id)}
+                                                                    />
+                                                                    <label htmlFor={`branch-${branch.id}`} className="text-sm text-gray-900 font-medium w-32 cursor-pointer">
+                                                                        {branch.name}
+                                                                    </label>
+                                                                    <select
+                                                                        className={`flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2 ${!entry.enabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                                        value={entry.roleId}
+                                                                        onChange={(e) => updateBranchRole(branch.id, e.target.value)}
+                                                                        disabled={!entry.enabled}
+                                                                    >
+                                                                        <option value="">Select Role...</option>
+                                                                        {entry.availableRoles.map(role => (
+                                                                            <option key={role.id} value={role.id}>{role.name}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
+                                                            )
+                                                        })
+                                                    )}
+                                                </div>
                                             ) : (
-                                                allBranches.map(branch => {
-                                                    const entry = branchRoleEntries.find(e => e.branchId === branch.id)
-                                                    if (!entry) return null
-
-                                                    return (
-                                                        <div key={branch.id} className={`flex items-center gap-3 p-2 rounded ${entry.enabled ? 'bg-white border border-indigo-100' : ''}`}>
-                                                            <input
-                                                                id={`branch-${branch.id}`}
-                                                                type="checkbox"
-                                                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                                                                checked={entry.enabled}
-                                                                onChange={() => toggleBranchEnabled(branch.id)}
-                                                            />
-                                                            <label htmlFor={`branch-${branch.id}`} className="text-sm text-gray-900 font-medium w-32 cursor-pointer">
-                                                                {branch.name}
-                                                            </label>
+                                                // Simple dropdown for non-super users
+                                                <div className="bg-gray-50 p-3 rounded-md border border-gray-200">
+                                                    {allBranches.length > 0 && branchRoleEntries[0] ? (
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">For Branch: {allBranches[0].name}</span>
                                                             <select
-                                                                className={`flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2 ${!entry.enabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                                                                value={entry.roleId}
-                                                                onChange={(e) => updateBranchRole(branch.id, e.target.value)}
-                                                                disabled={!entry.enabled}
+                                                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                                                value={branchRoleEntries[0].roleId}
+                                                                onChange={(e) => updateBranchRole(branchRoleEntries[0].branchId, e.target.value)}
+                                                                required
                                                             >
                                                                 <option value="">Select Role...</option>
-                                                                {entry.availableRoles.map(role => (
+                                                                {branchRoleEntries[0].availableRoles.map(role => (
                                                                     <option key={role.id} value={role.id}>{role.name}</option>
                                                                 ))}
                                                             </select>
                                                         </div>
-                                                    )
-                                                })
-                                            )}
-                                        </div>
-                                    ) : (
-                                        // Simple dropdown for non-super users
-                                        <div className="bg-gray-50 p-3 rounded-md border border-gray-200">
-                                            {allBranches.length > 0 && branchRoleEntries[0] ? (
-                                                <div className="flex flex-col gap-1">
-                                                    <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">For Branch: {allBranches[0].name}</span>
-                                                    <select
-                                                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                                        value={branchRoleEntries[0].roleId}
-                                                        onChange={(e) => updateBranchRole(branchRoleEntries[0].branchId, e.target.value)}
-                                                        required
-                                                    >
-                                                        <option value="">Select Role...</option>
-                                                        {branchRoleEntries[0].availableRoles.map(role => (
-                                                            <option key={role.id} value={role.id}>{role.name}</option>
-                                                        ))}
-                                                    </select>
+                                                    ) : (
+                                                        <p className="text-sm text-gray-500 italic">No branch context available.</p>
+                                                    )}
                                                 </div>
-                                            ) : (
-                                                <p className="text-sm text-gray-500 italic">No branch context available.</p>
+                                            )}
+
+                                            {branchRoleEntries.filter(e => e.enabled).length === 0 && (
+                                                <p className="text-xs text-red-500 mt-1">Staff must be assigned a role.</p>
                                             )}
                                         </div>
-                                    )}
-
-                                    {branchRoleEntries.filter(e => e.enabled).length === 0 && (
-                                        <p className="text-xs text-red-500 mt-1">Staff must be assigned a role.</p>
                                     )}
                                 </div>
                             )}
 
+                            {/* Qualifications Tab */}
+                            {activeTab === "qualifications" && !formData.isAdmin && (
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <label className="text-sm font-medium text-gray-700">
+                                            <GraduationCap size={16} className="inline mr-1" />
+                                            Qualifications, Degrees & Certificates
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={addQualification}
+                                            className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                                        >
+                                            <Plus size={16} />
+                                            Add Qualification
+                                        </button>
+                                    </div>
+                                    
+                                    {qualifications.length === 0 ? (
+                                        <p className="text-gray-500 text-sm italic p-4 bg-gray-50 rounded-md">No qualifications added yet. Click "Add Qualification" to add one.</p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {qualifications.map((qual, index) => (
+                                                <div key={index} className="border rounded-md p-3 bg-gray-50">
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <span className="text-xs font-medium text-gray-500 uppercase">Qualification #{index + 1}</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeQualification(index)}
+                                                            className="text-red-500 hover:text-red-700"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-600">Type</label>
+                                                            <select
+                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                                value={qual.type}
+                                                                onChange={(e) => updateQualification(index, 'type', e.target.value)}
+                                                            >
+                                                                {QUALIFICATION_TYPES.map(t => (
+                                                                    <option key={t.value} value={t.value}>{t.label}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-600">Name / Title</label>
+                                                            <input
+                                                                type="text"
+                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                                placeholder="e.g., MD, MBBS, Physiotherapy"
+                                                                value={qual.name}
+                                                                onChange={(e) => updateQualification(index, 'name', e.target.value)}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-600">Institution</label>
+                                                            <input
+                                                                type="text"
+                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                                placeholder="e.g., University of..."
+                                                                value={qual.institution || ""}
+                                                                onChange={(e) => updateQualification(index, 'institution', e.target.value)}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-600">Year</label>
+                                                            <input
+                                                                type="number"
+                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                                min="1950"
+                                                                max={new Date().getFullYear()}
+                                                                value={qual.year || ""}
+                                                                onChange={(e) => updateQualification(index, 'year', parseInt(e.target.value) || undefined)}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-600">Expiry Date (if applicable)</label>
+                                                            <input
+                                                                type="date"
+                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                                value={qual.expiryDate ? new Date(qual.expiryDate).toISOString().split('T')[0] : ""}
+                                                                onChange={(e) => updateQualification(index, 'expiryDate', e.target.value ? new Date(e.target.value) : undefined)}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-600">Document URL</label>
+                                                            <input
+                                                                type="url"
+                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                                placeholder="https://..."
+                                                                value={qual.documentUrl || ""}
+                                                                onChange={(e) => updateQualification(index, 'documentUrl', e.target.value)}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Working Hours Tab */}
+                            {activeTab === "workingHours" && !formData.isAdmin && (
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <label className="text-sm font-medium text-gray-700">
+                                            <Clock size={16} className="inline mr-1" />
+                                            Working Hours Schedule
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={addWorkingHourEntry}
+                                            className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                                            disabled={branchRoleEntries.filter(e => e.enabled).length === 0}
+                                        >
+                                            <Plus size={16} />
+                                            Add Schedule
+                                        </button>
+                                    </div>
+                                    
+                                    {branchRoleEntries.filter(e => e.enabled).length === 0 ? (
+                                        <p className="text-gray-500 text-sm italic p-4 bg-yellow-50 rounded-md border border-yellow-200">
+                                            Please assign at least one branch in the Details tab first.
+                                        </p>
+                                    ) : workingHours.length === 0 ? (
+                                        <p className="text-gray-500 text-sm italic p-4 bg-gray-50 rounded-md">
+                                            No working hours defined. Click "Add Schedule" to add entries.
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {workingHours.map((wh, index) => (
+                                                <div key={index} className="border rounded-md p-3 bg-gray-50">
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <span className="text-xs font-medium text-gray-500 uppercase">Schedule Entry #{index + 1}</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeWorkingHour(index)}
+                                                            className="text-red-500 hover:text-red-700"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                    <div className="grid grid-cols-5 gap-3 items-end">
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-600">Branch</label>
+                                                            <select
+                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                                value={wh.branchId}
+                                                                onChange={(e) => updateWorkingHour(index, 'branchId', e.target.value)}
+                                                            >
+                                                                {branchRoleEntries.filter(e => e.enabled).map(entry => (
+                                                                    <option key={entry.branchId} value={entry.branchId}>
+                                                                        {branchMap.get(entry.branchId) || entry.branchId}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-600">Day</label>
+                                                            <select
+                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                                value={wh.dayOfWeek}
+                                                                onChange={(e) => updateWorkingHour(index, 'dayOfWeek', parseInt(e.target.value))}
+                                                            >
+                                                                {DAYS_OF_WEEK.map(d => (
+                                                                    <option key={d.value} value={d.value}>{d.label}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-600">Start Time</label>
+                                                            <input
+                                                                type="time"
+                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                                value={wh.startTime}
+                                                                onChange={(e) => updateWorkingHour(index, 'startTime', e.target.value)}
+                                                                disabled={wh.isOff}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-600">End Time</label>
+                                                            <input
+                                                                type="time"
+                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                                value={wh.endTime}
+                                                                onChange={(e) => updateWorkingHour(index, 'endTime', e.target.value)}
+                                                                disabled={wh.isOff}
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-center gap-2 pb-2">
+                                                            <input
+                                                                type="checkbox"
+                                                                id={`off-${index}`}
+                                                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                                                checked={wh.isOff}
+                                                                onChange={(e) => updateWorkingHour(index, 'isOff', e.target.checked)}
+                                                            />
+                                                            <label htmlFor={`off-${index}`} className="text-sm text-gray-600">Off</label>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Services Tab */}
+                            {activeTab === "services" && !formData.isAdmin && (
+                                <div className="space-y-4">
+                                    <label className="text-sm font-medium text-gray-700">
+                                        <Stethoscope size={16} className="inline mr-1" />
+                                        Services Offered by Staff
+                                    </label>
+                                    
+                                    {branchRoleEntries.filter(e => e.enabled).length === 0 ? (
+                                        <p className="text-gray-500 text-sm italic p-4 bg-yellow-50 rounded-md border border-yellow-200">
+                                            Please assign at least one branch in the Details tab first.
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            {branchRoleEntries.filter(e => e.enabled).map(entry => {
+                                                const branchName = branchMap.get(entry.branchId) || entry.branchId
+                                                const services = branchServicesMap[entry.branchId] || []
+                                                const assignedServices = staffServiceAssignments[entry.branchId] || []
+                                                
+                                                return (
+                                                    <div key={entry.branchId} className="border rounded-md p-3 bg-gray-50">
+                                                        <h4 className="text-sm font-medium text-gray-900 mb-2">
+                                                            <Building size={14} className="inline mr-1" />
+                                                            {branchName}
+                                                        </h4>
+                                                        
+                                                        {services.length === 0 ? (
+                                                            <p className="text-gray-500 text-sm italic">No services configured for this branch.</p>
+                                                        ) : (
+                                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                                {services.map(service => (
+                                                                    <label
+                                                                        key={service.serviceId}
+                                                                        className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
+                                                                            assignedServices.includes(service.serviceId)
+                                                                                ? 'bg-indigo-50 border border-indigo-200'
+                                                                                : 'bg-white border border-gray-200 hover:bg-gray-50'
+                                                                        }`}
+                                                                    >
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                                                            checked={assignedServices.includes(service.serviceId)}
+                                                                            onChange={() => toggleStaffService(entry.branchId, service.serviceId)}
+                                                                        />
+                                                                        <span className="text-sm text-gray-700">{service.serviceName}</span>
+                                                                    </label>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {error && (
                                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative text-sm" role="alert">
