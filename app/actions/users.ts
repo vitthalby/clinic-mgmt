@@ -22,6 +22,7 @@ export type BranchRoleAssignment = {
 export type WorkingHoursEntry = {
     branchId: string
     dayOfWeek: number // 0-6 (Sunday-Saturday)
+    slotIndex: number // 0, 1, 2... for multiple slots per day
     startTime: string  // "09:00" format
     endTime: string   // "17:00" format
     isOff: boolean
@@ -490,16 +491,18 @@ export async function getStaffWorkingHours(userId: string): Promise<WorkingHours
             .select({
                 branchId: staffWorkingHours.branchId,
                 dayOfWeek: staffWorkingHours.dayOfWeek,
+                slotIndex: staffWorkingHours.slotIndex,
                 startTime: staffWorkingHours.startTime,
                 endTime: staffWorkingHours.endTime,
                 isOff: staffWorkingHours.isOff,
             })
             .from(staffWorkingHours)
             .where(eq(staffWorkingHours.userId, userId))
-            .orderBy(staffWorkingHours.branchId, staffWorkingHours.dayOfWeek)
+            .orderBy(staffWorkingHours.branchId, staffWorkingHours.dayOfWeek, staffWorkingHours.slotIndex)
 
         return hours.map(h => ({
             ...h,
+            slotIndex: h.slotIndex ?? 0,
             isOff: h.isOff ?? false,
         }))
     } catch (error) {
@@ -526,6 +529,7 @@ export async function saveStaffWorkingHours(userId: string, workingHours: Workin
                     userId,
                     branchId: h.branchId,
                     dayOfWeek: h.dayOfWeek,
+                    slotIndex: h.slotIndex,
                     startTime: h.startTime,
                     endTime: h.endTime,
                     isOff: h.isOff,

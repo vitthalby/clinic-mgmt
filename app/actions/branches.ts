@@ -21,6 +21,7 @@ export type FeatureAssignment = {
 
 export type OperatingHoursEntry = {
     dayOfWeek: number // 0-6 (Sunday-Saturday)
+    slotIndex: number // 0, 1, 2... for multiple slots per day
     openTime: string  // "09:00" format
     closeTime: string // "18:00" format
     isClosed: boolean
@@ -151,6 +152,7 @@ export async function createBranch(data: {
                 data.operatingHours.map((oh) => ({
                     branchId: newBranch.id,
                     dayOfWeek: oh.dayOfWeek,
+                    slotIndex: oh.slotIndex,
                     openTime: oh.openTime,
                     closeTime: oh.closeTime,
                     isClosed: oh.isClosed,
@@ -250,6 +252,7 @@ export async function updateBranch(
                     data.operatingHours.map((oh) => ({
                         branchId: id,
                         dayOfWeek: oh.dayOfWeek,
+                        slotIndex: oh.slotIndex,
                         openTime: oh.openTime,
                         closeTime: oh.closeTime,
                         isClosed: oh.isClosed,
@@ -479,16 +482,18 @@ export async function getBranchOperatingHours(branchId: string): Promise<Operati
         const hours = await db
             .select({
                 dayOfWeek: branchOperatingHours.dayOfWeek,
+                slotIndex: branchOperatingHours.slotIndex,
                 openTime: branchOperatingHours.openTime,
                 closeTime: branchOperatingHours.closeTime,
                 isClosed: branchOperatingHours.isClosed,
             })
             .from(branchOperatingHours)
             .where(eq(branchOperatingHours.branchId, branchId))
-            .orderBy(branchOperatingHours.dayOfWeek)
+            .orderBy(branchOperatingHours.dayOfWeek, branchOperatingHours.slotIndex)
 
         return hours.map(h => ({
             ...h,
+            slotIndex: h.slotIndex ?? 0,
             isClosed: h.isClosed ?? false,
         }))
     } catch (error) {

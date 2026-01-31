@@ -294,7 +294,7 @@ export const services = pgTable("services", {
 })
 
 // --- BRANCH OPERATING HOURS ---
-// Operating hours for each branch per day of week
+// Operating hours for each branch per day of week - supports multiple slots per day
 export const branchOperatingHours = pgTable(
     "branch_operating_hours",
     {
@@ -302,15 +302,16 @@ export const branchOperatingHours = pgTable(
             .notNull()
             .references(() => branches.id, { onDelete: "cascade" }),
         dayOfWeek: integer("day_of_week").notNull(), // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+        slotIndex: integer("slot_index").notNull().default(0), // 0, 1, 2... for multiple slots per day
         openTime: text("open_time").notNull(), // "09:00" format
         closeTime: text("close_time").notNull(), // "18:00" format
-        isClosed: boolean("is_closed").default(false), // If true, branch is closed this day
+        isClosed: boolean("is_closed").default(false), // If true, branch is closed this day (applies to entire day when slotIndex=0)
         createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
         updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
     },
     (t) => ({
-        // One entry per branch per day
-        pk: primaryKey({ columns: [t.branchId, t.dayOfWeek] }),
+        // One entry per branch per day per slot
+        pk: primaryKey({ columns: [t.branchId, t.dayOfWeek, t.slotIndex] }),
     })
 )
 
@@ -337,7 +338,7 @@ export const branchServices = pgTable(
 )
 
 // --- STAFF WORKING HOURS ---
-// Working hours for each staff member per day of week
+// Working hours for each staff member per day of week - supports multiple slots per day
 export const staffWorkingHours = pgTable(
     "staff_working_hours",
     {
@@ -348,15 +349,16 @@ export const staffWorkingHours = pgTable(
             .notNull()
             .references(() => branches.id, { onDelete: "cascade" }),
         dayOfWeek: integer("day_of_week").notNull(), // 0 = Sunday, ..., 6 = Saturday
+        slotIndex: integer("slot_index").notNull().default(0), // 0, 1, 2... for multiple slots per day
         startTime: text("start_time").notNull(), // "09:00" format
         endTime: text("end_time").notNull(), // "17:00" format
-        isOff: boolean("is_off").default(false), // If true, staff is off this day
+        isOff: boolean("is_off").default(false), // If true, staff is off this day (applies to entire day when slotIndex=0)
         createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
         updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
     },
     (t) => ({
-        // One entry per user per branch per day
-        pk: primaryKey({ columns: [t.userId, t.branchId, t.dayOfWeek] }),
+        // One entry per user per branch per day per slot
+        pk: primaryKey({ columns: [t.userId, t.branchId, t.dayOfWeek, t.slotIndex] }),
     })
 )
 

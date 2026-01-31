@@ -72,6 +72,7 @@ const DAYS_OF_WEEK = [
 
 const DEFAULT_OPERATING_HOURS: OperatingHoursEntry[] = DAYS_OF_WEEK.map((day) => ({
     dayOfWeek: day.value,
+    slotIndex: 0,
     openTime: "09:00",
     closeTime: "18:00",
     isClosed: day.value === 0, // Sunday closed by default
@@ -206,12 +207,23 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
 
         // Set operating hours from expanded data
         if (expanded?.operatingHours && expanded.operatingHours.length > 0) {
-            // Merge with defaults to ensure all days are present
-            const hoursMap = new Map(expanded.operatingHours.map(h => [h.dayOfWeek, h]))
-            const mergedHours = DEFAULT_OPERATING_HOURS.map(defaultHour => 
-                hoursMap.get(defaultHour.dayOfWeek) || defaultHour
-            )
-            setOperatingHours(mergedHours)
+            // Use the saved hours directly - they may have multiple slots per day
+            // Ensure each day has at least one entry
+            const hoursFromDb = expanded.operatingHours
+            const daysWithHours = new Set(hoursFromDb.map(h => h.dayOfWeek))
+            
+            // Add default entries for days without any hours
+            const missingDays = DAYS_OF_WEEK
+                .filter(d => !daysWithHours.has(d.value))
+                .map(d => ({
+                    dayOfWeek: d.value,
+                    slotIndex: 0,
+                    openTime: "09:00",
+                    closeTime: "18:00",
+                    isClosed: d.value === 0, // Sunday closed by default
+                }))
+            
+            setOperatingHours([...hoursFromDb, ...missingDays])
         } else {
             setOperatingHours(DEFAULT_OPERATING_HOURS)
         }
@@ -261,11 +273,63 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
         setFeatureAssignments(newAssignments)
     }
 
-    const updateOperatingHour = (dayOfWeek: number, field: keyof OperatingHoursEntry, value: string | boolean) => {
+    const updateOperatingHour = (dayOfWeek: number, slotIndex: number, field: keyof OperatingHoursEntry, value: string | boolean) => {
         setOperatingHours(prev => prev.map(hour =>
-            hour.dayOfWeek === dayOfWeek ? { ...hour, [field]: value } : hour
+            hour.dayOfWeek === dayOfWeek && hour.slotIndex === slotIndex 
+                ? { ...hour, [field]: value } 
+                : hour
         ))
     }
+
+    const addTimeSlot = (dayOfWeek: number) => {
+        const existingSlots = operatingHours.filter(h => h.dayOfWeek === dayOfWeek)
+        const maxSlotIndex = Math.max(...existingSlots.map(s => s.slotIndex), -1)
+        setOperatingHours(prev => [...prev, {
+            dayOfWeek,
+            slotIndex: maxSlotIndex + 1,
+            openTime: "09:00",
+            closeTime: "18:00",
+            isClosed: false,
+        }])
+    }
+
+    const removeTimeSlot = (dayOfWeek: number, slotIndex: number) => {
+        setOperatingHours(prev => prev.filter(h => 
+            !(h.dayOfWeek === dayOfWeek && h.slotIndex === slotIndex)
+        ))
+    }
+
+    const toggleDayClosed = (dayOfWeek: number, isClosed: boolean) => {
+        if (isClosed) {
+            // When closing a day, keep only slot 0 and mark it as closed
+            setOperatingHours(prev => {
+                const otherDays = prev.filter(h => h.dayOfWeek !== dayOfWeek)
+                return [...otherDays, {
+                    dayOfWeek,
+                    slotIndex: 0,
+                    openTime: "09:00",
+                    closeTime: "18:00",
+                    isClosed: true,
+                }]
+            })
+        } else {
+            // When opening a day, set first slot to open
+            setOperatingHours(prev => prev.map(h => 
+                h.dayOfWeek === dayOfWeek && h.slotIndex === 0
+                    ? { ...h, isClosed: false }
+                    : h
+            ))
+        }
+    }
+
+    // Group operating hours by day for easier rendering
+    const hoursByDay = DAYS_OF_WEEK.map(day => {
+        const slots = operatingHours
+            .filter(h => h.dayOfWeek === day.value)
+            .sort((a, b) => a.slotIndex - b.slotIndex)
+        const isClosed = slots.length > 0 && slots[0].isClosed
+        return { day, slots, isClosed }
+    })
 
     const toggleServiceAssignment = (serviceId: string) => {
         setBranchServiceAssignments(prev => {
@@ -366,13 +430,27 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                                             
                                             <ExpandedDetailSection title="Operating Hours">
                                                 {expanded?.operatingHours && expanded.operatingHours.length > 0 ? (
-                                                    expanded.operatingHours.map((h: OperatingHoursEntry) => (
-                                                        <ExpandedDetailRow 
-                                                            key={h.dayOfWeek}
-                                                            label={DAYS_OF_WEEK.find(d => d.value === h.dayOfWeek)?.label || ''} 
-                                                            value={h.isClosed ? 'Closed' : `${h.openTime} - ${h.closeTime}`} 
-                                                        />
-                                                    ))
+                                                    // Group by day and display multiple slots
+                                                    DAYS_OF_WEEK.map(day => {
+                                                        const daySlots = expanded.operatingHours
+                                                            .filter((h: OperatingHoursEntry) => h.dayOfWeek === day.value)
+                                                            .sort((a: OperatingHoursEntry, b: OperatingHoursEntry) => a.slotIndex - b.slotIndex)
+                                                        
+                                                        if (daySlots.length === 0) return null
+                                                        
+                                                        const isClosed = daySlots[0].isClosed
+                                                        const slotsDisplay = isClosed 
+                                                            ? 'Closed' 
+                                                            : daySlots.map((h: OperatingHoursEntry) => `${h.openTime} - ${h.closeTime}`).join(', ')
+                                                        
+                                                        return (
+                                                            <ExpandedDetailRow 
+                                                                key={day.value}
+                                                                label={day.label} 
+                                                                value={slotsDisplay} 
+                                                            />
+                                                        )
+                                                    })
                                                 ) : (
                                                     <ExpandedDetailRow label="Hours" value="Not configured" />
                                                 )}
@@ -546,42 +624,71 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                             {/* Operating Hours Tab */}
                             {activeTab === "hours" && (
                                 <div>
-                                    <p className="text-sm text-gray-500 mb-4">Configure when this branch is open for business.</p>
-                                    <div className="space-y-3">
-                                        {operatingHours.map((hour) => {
-                                            const day = DAYS_OF_WEEK.find(d => d.value === hour.dayOfWeek)
-                                            return (
-                                                <div key={hour.dayOfWeek} className="flex items-center gap-4 p-3 rounded-lg border border-gray-200">
-                                                    <div className="w-24 font-medium text-gray-700">{day?.label}</div>
-                                                    <label className="flex items-center gap-2">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={hour.isClosed}
-                                                            onChange={(e) => updateOperatingHour(hour.dayOfWeek, "isClosed", e.target.checked)}
-                                                            className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
-                                                        />
-                                                        <span className="text-sm text-gray-600">Closed</span>
-                                                    </label>
-                                                    {!hour.isClosed && (
-                                                        <>
+                                    <p className="text-sm text-gray-500 mb-4">
+                                        Configure when this branch is open for business. Add multiple time slots per day for breaks (e.g., 9:00-12:00 and 18:00-21:00).
+                                    </p>
+                                    <div className="space-y-4">
+                                        {hoursByDay.map(({ day, slots, isClosed }) => (
+                                            <div key={day.value} className="p-4 rounded-lg border border-gray-200 bg-gray-50">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-24 font-medium text-gray-700">{day.label}</div>
+                                                        <label className="flex items-center gap-2">
                                                             <input
-                                                                type="time"
-                                                                value={hour.openTime}
-                                                                onChange={(e) => updateOperatingHour(hour.dayOfWeek, "openTime", e.target.value)}
-                                                                className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 text-gray-900"
+                                                                type="checkbox"
+                                                                checked={isClosed}
+                                                                onChange={(e) => toggleDayClosed(day.value, e.target.checked)}
+                                                                className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
                                                             />
-                                                            <span className="text-gray-400">to</span>
-                                                            <input
-                                                                type="time"
-                                                                value={hour.closeTime}
-                                                                onChange={(e) => updateOperatingHour(hour.dayOfWeek, "closeTime", e.target.value)}
-                                                                className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 text-gray-900"
-                                                            />
-                                                        </>
+                                                            <span className="text-sm text-gray-600">Closed</span>
+                                                        </label>
+                                                    </div>
+                                                    {!isClosed && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => addTimeSlot(day.value)}
+                                                            className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                                                        >
+                                                            <Plus size={14} />
+                                                            Add Slot
+                                                        </button>
                                                     )}
                                                 </div>
-                                            )
-                                        })}
+                                                
+                                                {!isClosed && (
+                                                    <div className="space-y-2">
+                                                        {slots.map((slot, idx) => (
+                                                            <div key={slot.slotIndex} className="flex items-center gap-3 bg-white p-2 rounded border border-gray-100">
+                                                                <span className="text-xs text-gray-400 w-16">Slot {idx + 1}</span>
+                                                                <input
+                                                                    type="time"
+                                                                    value={slot.openTime}
+                                                                    onChange={(e) => updateOperatingHour(day.value, slot.slotIndex, "openTime", e.target.value)}
+                                                                    className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2 text-gray-900"
+                                                                />
+                                                                <span className="text-gray-400">to</span>
+                                                                <input
+                                                                    type="time"
+                                                                    value={slot.closeTime}
+                                                                    onChange={(e) => updateOperatingHour(day.value, slot.slotIndex, "closeTime", e.target.value)}
+                                                                    className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2 text-gray-900"
+                                                                />
+                                                                {slots.length > 1 && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => removeTimeSlot(day.value, slot.slotIndex)}
+                                                                        className="text-red-500 hover:text-red-700 p-1"
+                                                                        title="Remove slot"
+                                                                    >
+                                                                        <Trash2 size={14} />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
                             )}

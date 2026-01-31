@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { createUser, updateUser, deleteUser, getRolesForBranch, getUserDetails, getUsersMinimal, BranchRoleAssignment, getStaffQualifications, getStaffWorkingHours, getStaffServices, saveStaffQualifications, saveStaffWorkingHours, saveStaffServices, getAvailableServicesForStaffBranch, QualificationEntry, WorkingHoursEntry, StaffServiceAssignment } from "@/app/actions/users"
-import { Shield, Building, Edit2, Plus, Trash2, Clock, GraduationCap, Stethoscope } from "lucide-react"
+import { getBranchOperatingHours, OperatingHoursEntry } from "@/app/actions/branches"
+import { Shield, Building, Edit2, Plus, Trash2, Clock, GraduationCap, Stethoscope, AlertCircle } from "lucide-react"
 import { useExpandableTable } from "@/hooks/useExpandableTable"
 import { ExpandableTableRow, ExpandedDetailRow, ExpandedDetailSection } from "@/components/ui"
 import type { AuditDisplayInfo } from "@/types/audit"
@@ -131,7 +132,7 @@ export default function UsersClient({
     const [editingUser, setEditingUser] = useState<User | null>(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [activeTab, setActiveTab] = useState<"details" | "qualifications" | "hours" | "services">("details")
+    const [activeTab, setActiveTab] = useState<"details" | "qualifications" | "workingHours" | "services">("details")
 
     // Form State
     const [formData, setFormData] = useState({
@@ -148,6 +149,9 @@ export default function UsersClient({
     
     // Working hours state
     const [workingHours, setWorkingHours] = useState<WorkingHoursEntry[]>([])
+    
+    // Branch operating hours for validation (branchId -> hours)
+    const [branchOperatingHoursMap, setBranchOperatingHoursMap] = useState<Record<string, OperatingHoursEntry[]>>({})
     
     // Staff services state
     const [staffServiceAssignments, setStaffServiceAssignments] = useState<Record<string, string[]>>({}) // branchId -> serviceId[]
@@ -194,6 +198,7 @@ export default function UsersClient({
         setWorkingHours([])
         setStaffServiceAssignments({})
         setBranchServicesMap({})
+        setBranchOperatingHoursMap({})
         setActiveTab("details")
         setError(null)
     }
@@ -255,10 +260,13 @@ export default function UsersClient({
                 setStaffServiceAssignments(serviceMap)
             }
             
-            // Load available services for each branch
+            // Load available services and operating hours for each branch
             const branchIds = fullUser.branches?.map(b => b.id) || []
             if (branchIds.length > 0) {
-                await loadBranchServices(branchIds)
+                await Promise.all([
+                    loadBranchServices(branchIds),
+                    loadBranchOperatingHours(branchIds),
+                ])
             }
         } else if (!isAdmin) {
             // User has no existing data, initialize empty branch entries
@@ -402,27 +410,156 @@ export default function UsersClient({
     }
 
     // Working hours helpers
-    const addWorkingHourEntry = () => {
-        const enabledBranches = branchRoleEntries.filter(e => e.enabled)
-        if (enabledBranches.length === 0) return
+    const addWorkingHourSlot = (branchId: string, dayOfWeek: number) => {
+        const existingSlots = workingHours.filter(
+            h => h.branchId === branchId && h.dayOfWeek === dayOfWeek
+        )
+        const maxSlotIndex = existingSlots.length > 0 
+            ? Math.max(...existingSlots.map(s => s.slotIndex)) 
+            : -1
         
         setWorkingHours(prev => [...prev, {
-            branchId: enabledBranches[0].branchId,
-            dayOfWeek: 1,
+            branchId,
+            dayOfWeek,
+            slotIndex: maxSlotIndex + 1,
             startTime: "09:00",
             endTime: "17:00",
             isOff: false,
         }])
     }
 
-    const updateWorkingHour = (index: number, field: keyof WorkingHoursEntry, value: any) => {
-        setWorkingHours(prev => prev.map((w, i) => 
-            i === index ? { ...w, [field]: value } : w
+    const removeWorkingHourSlot = (branchId: string, dayOfWeek: number, slotIndex: number) => {
+        setWorkingHours(prev => prev.filter(
+            h => !(h.branchId === branchId && h.dayOfWeek === dayOfWeek && h.slotIndex === slotIndex)
         ))
     }
 
-    const removeWorkingHour = (index: number) => {
-        setWorkingHours(prev => prev.filter((_, i) => i !== index))
+    const updateWorkingHourSlot = (branchId: string, dayOfWeek: number, slotIndex: number, field: keyof WorkingHoursEntry, value: any) => {
+        setWorkingHours(prev => prev.map(w => 
+            w.branchId === branchId && w.dayOfWeek === dayOfWeek && w.slotIndex === slotIndex
+                ? { ...w, [field]: value }
+                : w
+        ))
+    }
+
+    const toggleWorkingDayOff = (branchId: string, dayOfWeek: number, isOff: boolean) => {
+        const existingSlots = workingHours.filter(
+            h => h.branchId === branchId && h.dayOfWeek === dayOfWeek
+        )
+
+        if (isOff) {
+            // Remove all existing slots for this day and add a single "off" entry
+            setWorkingHours(prev => [
+                ...prev.filter(h => !(h.branchId === branchId && h.dayOfWeek === dayOfWeek)),
+                {
+                    branchId,
+                    dayOfWeek,
+                    slotIndex: 0,
+                    startTime: "09:00",
+                    endTime: "17:00",
+                    isOff: true,
+                }
+            ])
+        } else {
+            // If turning off "off" status, set the first slot to not off
+            if (existingSlots.length > 0) {
+                setWorkingHours(prev => prev.map(h => 
+                    h.branchId === branchId && h.dayOfWeek === dayOfWeek && h.slotIndex === 0
+                        ? { ...h, isOff: false }
+                        : h
+                ))
+            } else {
+                // Add a working slot
+                addWorkingHourSlot(branchId, dayOfWeek)
+            }
+        }
+    }
+
+    // Group working hours by branch and day for better UX
+    const getWorkingHoursByBranch = () => {
+        const enabledBranches = branchRoleEntries.filter(e => e.enabled)
+        return enabledBranches.map(entry => {
+            const branchName = branchMap.get(entry.branchId) || entry.branchId
+            const branchHoursRef = branchOperatingHoursMap[entry.branchId] || []
+            
+            const dayData = DAYS_OF_WEEK.map(day => {
+                const slots = workingHours
+                    .filter(h => h.branchId === entry.branchId && h.dayOfWeek === day.value)
+                    .sort((a, b) => a.slotIndex - b.slotIndex)
+                const isOff = slots.length > 0 && slots[0].isOff
+                const hasSlots = slots.length > 0
+                
+                // Get branch hours for this day to show as reference
+                const branchDayHours = branchHoursRef.filter(h => h.dayOfWeek === day.value)
+                const branchClosed = branchDayHours.length > 0 && branchDayHours[0].isClosed
+                const branchHoursDisplay = branchClosed 
+                    ? "Closed" 
+                    : branchDayHours.map(h => `${h.openTime}-${h.closeTime}`).join(", ") || "Not set"
+                
+                return { day, slots, isOff, hasSlots, branchHoursDisplay, branchClosed }
+            })
+            
+            return { branchId: entry.branchId, branchName, dayData }
+        })
+    }
+
+    // Load branch operating hours for validation
+    const loadBranchOperatingHours = async (branchIds: string[]) => {
+        const newHoursMap: Record<string, OperatingHoursEntry[]> = { ...branchOperatingHoursMap }
+        for (const branchId of branchIds) {
+            if (!newHoursMap[branchId]) {
+                const hours = await getBranchOperatingHours(branchId)
+                newHoursMap[branchId] = hours
+            }
+        }
+        setBranchOperatingHoursMap(newHoursMap)
+    }
+
+    // Validate if a staff working hour is within branch operating hours
+    const validateStaffHourWithinBranch = (staffHour: WorkingHoursEntry): { isValid: boolean; message?: string } => {
+        const branchHours = branchOperatingHoursMap[staffHour.branchId]
+        if (!branchHours || branchHours.length === 0) {
+            return { isValid: true } // Cannot validate if no branch hours
+        }
+
+        // Find branch hours for this day
+        const branchDayHours = branchHours.filter(h => h.dayOfWeek === staffHour.dayOfWeek)
+        if (branchDayHours.length === 0) {
+            return { isValid: false, message: "Branch has no hours for this day" }
+        }
+
+        // Check if branch is closed this day
+        if (branchDayHours[0].isClosed) {
+            return { isValid: false, message: "Branch is closed this day" }
+        }
+
+        // Check if staff hours fall within any of the branch slots
+        const staffStart = parseTimeToMinutes(staffHour.startTime)
+        const staffEnd = parseTimeToMinutes(staffHour.endTime)
+
+        const isWithinAnySlot = branchDayHours.some(branchSlot => {
+            const branchStart = parseTimeToMinutes(branchSlot.openTime)
+            const branchEnd = parseTimeToMinutes(branchSlot.closeTime)
+            return staffStart >= branchStart && staffEnd <= branchEnd
+        })
+
+        if (!isWithinAnySlot) {
+            const availableSlots = branchDayHours
+                .map(h => `${h.openTime}-${h.closeTime}`)
+                .join(', ')
+            return { 
+                isValid: false, 
+                message: `Must be within branch hours: ${availableSlots}` 
+            }
+        }
+
+        return { isValid: true }
+    }
+
+    // Helper to parse time string to minutes
+    const parseTimeToMinutes = (time: string): number => {
+        const [hours, minutes] = time.split(':').map(Number)
+        return hours * 60 + minutes
     }
 
     // Staff service assignment helpers
@@ -439,14 +576,21 @@ export default function UsersClient({
         })
     }
 
-    // Handle branch selection change for staff - reload available services
+    // Handle branch selection change for staff - reload available services and operating hours
     const handleBranchToggle = async (branchId: string) => {
         toggleBranchEnabled(branchId)
         
-        // Load services for the branch if enabling
+        // Load services and operating hours for the branch if enabling
         const entry = branchRoleEntries.find(e => e.branchId === branchId)
-        if (entry && !entry.enabled && !branchServicesMap[branchId]) {
-            await loadBranchServices([branchId])
+        if (entry && !entry.enabled) {
+            const promises: Promise<void>[] = []
+            if (!branchServicesMap[branchId]) {
+                promises.push(loadBranchServices([branchId]))
+            }
+            if (!branchOperatingHoursMap[branchId]) {
+                promises.push(loadBranchOperatingHours([branchId]))
+            }
+            await Promise.all(promises)
         }
     }
 
@@ -952,101 +1096,121 @@ export default function UsersClient({
                             {/* Working Hours Tab */}
                             {activeTab === "workingHours" && !formData.isAdmin && (
                                 <div className="space-y-4">
-                                    <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Clock size={16} className="text-gray-600" />
                                         <label className="text-sm font-medium text-gray-700">
-                                            <Clock size={16} className="inline mr-1" />
                                             Working Hours Schedule
                                         </label>
-                                        <button
-                                            type="button"
-                                            onClick={addWorkingHourEntry}
-                                            className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-                                            disabled={branchRoleEntries.filter(e => e.enabled).length === 0}
-                                        >
-                                            <Plus size={16} />
-                                            Add Schedule
-                                        </button>
                                     </div>
+                                    <p className="text-sm text-gray-500">
+                                        Set working hours for each branch. Add multiple time slots per day for split schedules (e.g., 9:00-12:00 and 14:00-18:00).
+                                    </p>
                                     
                                     {branchRoleEntries.filter(e => e.enabled).length === 0 ? (
                                         <p className="text-gray-500 text-sm italic p-4 bg-yellow-50 rounded-md border border-yellow-200">
                                             Please assign at least one branch in the Details tab first.
                                         </p>
-                                    ) : workingHours.length === 0 ? (
-                                        <p className="text-gray-500 text-sm italic p-4 bg-gray-50 rounded-md">
-                                            No working hours defined. Click "Add Schedule" to add entries.
-                                        </p>
                                     ) : (
-                                        <div className="space-y-3">
-                                            {workingHours.map((wh, index) => (
-                                                <div key={index} className="border rounded-md p-3 bg-gray-50">
-                                                    <div className="flex justify-between items-start mb-2">
-                                                        <span className="text-xs font-medium text-gray-500 uppercase">Schedule Entry #{index + 1}</span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeWorkingHour(index)}
-                                                            className="text-red-500 hover:text-red-700"
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
+                                        <div className="space-y-6">
+                                            {getWorkingHoursByBranch().map(({ branchId, branchName, dayData }) => (
+                                                <div key={branchId} className="border rounded-lg overflow-hidden">
+                                                    <div className="bg-indigo-50 px-4 py-3 border-b border-indigo-100">
+                                                        <h4 className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+                                                            <Building size={16} />
+                                                            {branchName}
+                                                        </h4>
                                                     </div>
-                                                    <div className="grid grid-cols-5 gap-3 items-end">
-                                                        <div>
-                                                            <label className="block text-xs font-medium text-gray-600">Branch</label>
-                                                            <select
-                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
-                                                                value={wh.branchId}
-                                                                onChange={(e) => updateWorkingHour(index, 'branchId', e.target.value)}
-                                                            >
-                                                                {branchRoleEntries.filter(e => e.enabled).map(entry => (
-                                                                    <option key={entry.branchId} value={entry.branchId}>
-                                                                        {branchMap.get(entry.branchId) || entry.branchId}
-                                                                    </option>
-                                                                ))}
-                                                            </select>
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-xs font-medium text-gray-600">Day</label>
-                                                            <select
-                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
-                                                                value={wh.dayOfWeek}
-                                                                onChange={(e) => updateWorkingHour(index, 'dayOfWeek', parseInt(e.target.value))}
-                                                            >
-                                                                {DAYS_OF_WEEK.map(d => (
-                                                                    <option key={d.value} value={d.value}>{d.label}</option>
-                                                                ))}
-                                                            </select>
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-xs font-medium text-gray-600">Start Time</label>
-                                                            <input
-                                                                type="time"
-                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
-                                                                value={wh.startTime}
-                                                                onChange={(e) => updateWorkingHour(index, 'startTime', e.target.value)}
-                                                                disabled={wh.isOff}
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-xs font-medium text-gray-600">End Time</label>
-                                                            <input
-                                                                type="time"
-                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
-                                                                value={wh.endTime}
-                                                                onChange={(e) => updateWorkingHour(index, 'endTime', e.target.value)}
-                                                                disabled={wh.isOff}
-                                                            />
-                                                        </div>
-                                                        <div className="flex items-center gap-2 pb-2">
-                                                            <input
-                                                                type="checkbox"
-                                                                id={`off-${index}`}
-                                                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                                                                checked={wh.isOff}
-                                                                onChange={(e) => updateWorkingHour(index, 'isOff', e.target.checked)}
-                                                            />
-                                                            <label htmlFor={`off-${index}`} className="text-sm text-gray-600">Off</label>
-                                                        </div>
+                                                    <div className="divide-y divide-gray-100">
+                                                        {dayData.map(({ day, slots, isOff, hasSlots, branchHoursDisplay, branchClosed }) => (
+                                                            <div key={day.value} className="p-3 bg-white hover:bg-gray-50">
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <div className="flex items-center gap-4">
+                                                                        <div className="w-24 font-medium text-gray-700 text-sm">{day.label}</div>
+                                                                        <span className="text-xs text-gray-400" title="Branch operating hours">
+                                                                            Branch: {branchHoursDisplay}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-3">
+                                                                        <label className="flex items-center gap-2">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={isOff}
+                                                                                onChange={(e) => toggleWorkingDayOff(branchId, day.value, e.target.checked)}
+                                                                                className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                                                                                disabled={branchClosed}
+                                                                            />
+                                                                            <span className="text-xs text-gray-600">Off</span>
+                                                                        </label>
+                                                                        {!isOff && !branchClosed && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => addWorkingHourSlot(branchId, day.value)}
+                                                                                className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                                                                            >
+                                                                                <Plus size={14} />
+                                                                                Add Slot
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                                
+                                                                {branchClosed ? (
+                                                                    <div className="text-xs text-gray-400 italic ml-28">Branch closed</div>
+                                                                ) : isOff ? (
+                                                                    <div className="text-xs text-red-500 italic ml-28">Day off</div>
+                                                                ) : !hasSlots ? (
+                                                                    <div className="ml-28">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => addWorkingHourSlot(branchId, day.value)}
+                                                                            className="text-xs text-gray-400 hover:text-indigo-600 italic"
+                                                                        >
+                                                                            Click "Add Slot" to set working hours
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="space-y-2 ml-28">
+                                                                        {slots.map((slot, idx) => {
+                                                                            const validation = validateStaffHourWithinBranch(slot)
+                                                                            return (
+                                                                                <div key={slot.slotIndex} className={`flex items-center gap-3 p-2 rounded border ${validation.isValid ? 'bg-gray-50 border-gray-100' : 'bg-red-50 border-red-200'}`}>
+                                                                                    <span className="text-xs text-gray-400 w-12">Slot {idx + 1}</span>
+                                                                                    <input
+                                                                                        type="time"
+                                                                                        value={slot.startTime}
+                                                                                        onChange={(e) => updateWorkingHourSlot(branchId, day.value, slot.slotIndex, 'startTime', e.target.value)}
+                                                                                        className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-1.5 w-28"
+                                                                                    />
+                                                                                    <span className="text-gray-400 text-sm">to</span>
+                                                                                    <input
+                                                                                        type="time"
+                                                                                        value={slot.endTime}
+                                                                                        onChange={(e) => updateWorkingHourSlot(branchId, day.value, slot.slotIndex, 'endTime', e.target.value)}
+                                                                                        className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-1.5 w-28"
+                                                                                    />
+                                                                                    {slots.length > 1 && (
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => removeWorkingHourSlot(branchId, day.value, slot.slotIndex)}
+                                                                                            className="text-red-500 hover:text-red-700 p-1"
+                                                                                            title="Remove slot"
+                                                                                        >
+                                                                                            <Trash2 size={14} />
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {!validation.isValid && (
+                                                                                        <div className="flex items-center gap-1 text-xs text-red-600">
+                                                                                            <AlertCircle size={12} />
+                                                                                            <span className="truncate max-w-xs" title={validation.message}>{validation.message}</span>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            )
+                                                                        })}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 </div>
                                             ))}
