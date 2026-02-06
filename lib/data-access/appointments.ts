@@ -534,7 +534,29 @@ export async function getAvailableSlots(options: {
     for (const staff of qualifiedStaff) {
         // Get staff working hours
         const staffHours = await getStaffHoursForDay(staff.id, branchId, dayOfWeek)
-        if (staffHours.length === 0 || staffHours[0].isOff) continue
+
+        // Check if staff is explicitly off for this day
+        if (staffHours.length > 0 && staffHours[0].isOff) continue
+
+        // Determine effective working hours:
+        // - If staff has custom hours defined, use those
+        // - If staff has NO custom hours, fall back to branch operating hours
+        let effectiveStaffHours: { startTime: string; endTime: string }[]
+
+        if (staffHours.length > 0) {
+            // Staff has custom working hours - use them
+            effectiveStaffHours = staffHours
+                .filter((h) => !h.isOff)
+                .map((h) => ({ startTime: h.startTime, endTime: h.endTime }))
+        } else {
+            // No custom hours defined - default to branch operating hours
+            effectiveStaffHours = branchHours
+                .filter((h) => !h.isClosed)
+                .map((h) => ({ startTime: h.openTime, endTime: h.closeTime }))
+        }
+
+        // Skip if no effective working hours
+        if (effectiveStaffHours.length === 0) continue
 
         // Get existing appointments
         const existingAppts = await getStaffAppointmentsForDate(
@@ -545,7 +567,7 @@ export async function getAvailableSlots(options: {
 
         // Calculate free slots
         const slots = calculateFreeSlots(
-            staffHours.filter((h) => !h.isOff),
+            effectiveStaffHours,
             branchHours.filter((h) => !h.isClosed),
             existingAppts,
             duration,

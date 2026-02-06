@@ -1168,7 +1168,9 @@ export default function UsersClient({
                                         </label>
                                     </div>
                                     <p className="text-sm text-gray-500">
-                                        Set working hours for each branch. Add multiple time slots per day for split schedules (e.g., 9:00-12:00 and 14:00-18:00).
+                                        <strong>By default, staff working hours align with the branch operating hours.</strong>{' '}
+                                        Add custom time slots only if this staff member has different hours than the branch.
+                                        Multiple slots per day support split schedules (e.g., 9:00-12:00 and 14:00-18:00).
                                     </p>
 
                                     {branchRoleEntries.filter(e => e.enabled).length === 0 ? (
@@ -1224,13 +1226,16 @@ export default function UsersClient({
                                                                 ) : isOff ? (
                                                                     <div className="text-xs text-red-500 italic ml-28">Day off</div>
                                                                 ) : !hasSlots ? (
-                                                                    <div className="ml-28">
+                                                                    <div className="ml-28 flex items-center gap-2">
+                                                                        <span className="text-xs text-green-600 italic">
+                                                                            Using branch hours ({branchHoursDisplay})
+                                                                        </span>
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => addWorkingHourSlot(branchId, day.value)}
-                                                                            className="text-xs text-gray-400 hover:text-indigo-600 italic"
+                                                                            className="text-xs text-indigo-600 hover:text-indigo-800"
                                                                         >
-                                                                            Click "Add Slot" to set working hours
+                                                                            — or add custom slot
                                                                         </button>
                                                                     </div>
                                                                 ) : (
@@ -1253,16 +1258,14 @@ export default function UsersClient({
                                                                                         onChange={(e) => updateWorkingHourSlot(branchId, day.value, slot.slotIndex, 'endTime', e.target.value)}
                                                                                         className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-1.5 w-28"
                                                                                     />
-                                                                                    {slots.length > 1 && (
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() => removeWorkingHourSlot(branchId, day.value, slot.slotIndex)}
-                                                                                            className="text-red-500 hover:text-red-700 p-1"
-                                                                                            title="Remove slot"
-                                                                                        >
-                                                                                            <Trash2 size={14} />
-                                                                                        </button>
-                                                                                    )}
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => removeWorkingHourSlot(branchId, day.value, slot.slotIndex)}
+                                                                                        className="text-red-500 hover:text-red-700 p-1"
+                                                                                        title="Remove slot (staff will use branch hours if no custom hours defined)"
+                                                                                    >
+                                                                                        <Trash2 size={14} />
+                                                                                    </button>
                                                                                     {!validation.isValid && (
                                                                                         <div className="flex items-center gap-1 text-xs text-red-600">
                                                                                             <AlertCircle size={12} />
