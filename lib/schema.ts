@@ -22,6 +22,7 @@ export const users = pgTable("user", {
     emailVerified: timestamp("emailVerified", { mode: "date" }),
     image: text("image"),
     role: text("role").default("STAFF"), // Legacy/Simple Role
+    canTakeAppointments: boolean("can_take_appointments").default(false), // If true, this user can be assigned to appointments
 })
 
 // --- AUTH TABLES (NextAuth) ---
@@ -73,48 +74,48 @@ export const verificationTokens = pgTable(
 
 export const customers = pgTable("customers", {
     id: uuid("id").defaultRandom().primaryKey(),
-    
+
     // Core Identity (M = Mandatory, O = Optional)
     firstName: text("first_name").notNull(), // M
     lastName: text("last_name").notNull(), // M
     mobile: text("mobile").notNull(), // M - Primary contact
     email: text("email"), // O
-    
+
     // Demographics
     dob: timestamp("dob", { mode: "date" }), // O - Date of Birth
     gender: text("gender"), // O - Male, Female, Other
     bloodGroup: text("blood_group"), // O - A+, A-, B+, B-, AB+, AB-, O+, O-
-    
+
     // Address
     addressLine1: text("address_line1"), // O
     addressLine2: text("address_line2"), // O
     city: text("city"), // O
     state: text("state"), // O
     pincode: text("pincode"), // O
-    
+
     // Medical Information
     medicalHistory: text("medical_history"), // O - Free text for conditions, allergies, etc.
     allergies: text("allergies"), // O - Known allergies
     currentMedications: text("current_medications"), // O
-    
+
     // Emergency Contact
     emergencyContactName: text("emergency_contact_name"), // O
     emergencyContactPhone: text("emergency_contact_phone"), // O
     emergencyContactRelation: text("emergency_contact_relation"), // O
-    
+
     // Preferences & Metadata
     preferredLanguage: text("preferred_language").default("English"), // O
     source: text("source"), // O - Walk-in, Referral, Website, Social Media, etc.
     referredBy: text("referred_by"), // O - Name of referrer if applicable
     tags: jsonb("tags").$type<string[]>().default([]), // O - VIP, Senior, Insurance, etc.
     notes: text("notes"), // O - Internal notes
-    
+
     // Branch Association
     branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
-    
+
     // Status
     isActive: boolean("is_active").default(true),
-    
+
     // Audit
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
@@ -124,12 +125,38 @@ export const customers = pgTable("customers", {
 
 export const appointments = pgTable("appointments", {
     id: uuid("id").defaultRandom().primaryKey(),
-    customerId: uuid("customer_id").references(() => customers.id),
-    title: text("title").notNull(),
-    startTime: timestamp("start_time", { mode: "date" }).notNull(),
-    endTime: timestamp("end_time", { mode: "date" }).notNull(),
-    status: text("status").default("SCHEDULED"), // SCHEDULED, COMPLETED, CANCELLED, NOSHOW
+
+    // Core References
+    branchId: uuid("branch_id")
+        .notNull()
+        .references(() => branches.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id")
+        .notNull()
+        .references(() => customers.id, { onDelete: "cascade" }),
+    serviceId: uuid("service_id")
+        .notNull()
+        .references(() => services.id, { onDelete: "restrict" }),
+    staffId: text("staff_id")
+        .notNull()
+        .references(() => users.id, { onDelete: "restrict" }),
+
+    // Timing - using date + time strings for easier querying
+    appointmentDate: timestamp("appointment_date", { mode: "date" }).notNull(),
+    startTime: text("start_time").notNull(), // "09:00" format (HH:mm)
+    endTime: text("end_time").notNull(), // "09:30" format
+    duration: integer("duration").notNull(), // Duration in minutes
+
+    // Status
+    status: text("status").default("SCHEDULED"), // SCHEDULED, COMPLETED, CANCELLED, NO_SHOW
+
+    // Additional Info
     notes: text("notes"),
+    cancellationReason: text("cancellation_reason"),
+
+    // Pricing snapshot at booking time
+    servicePrice: integer("service_price"),
+
+    // Audit
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
     createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
@@ -398,5 +425,25 @@ export const staffServices = pgTable(
     },
     (t) => ({
         pk: primaryKey({ columns: [t.userId, t.branchId, t.serviceId] }),
+    })
+)
+
+// --- STAFF SERVICE CATEGORIES ---
+// Categories of services a staff member can provide at a specific branch
+// This allows broader assignment (e.g. "Everything in Physiotherapy")
+export const staffServiceCategories = pgTable(
+    "staff_service_categories",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        branchId: uuid("branch_id")
+            .notNull()
+            .references(() => branches.id, { onDelete: "cascade" }),
+        category: text("category").notNull(), // e.g. "Consultation", "Therapy" matches services.category
+        createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    },
+    (t) => ({
+        pk: primaryKey({ columns: [t.userId, t.branchId, t.category] }),
     })
 )

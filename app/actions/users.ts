@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { users, userBranchRoles, branches, roles, staffWorkingHours, staffQualifications, staffServices, services, branchServices } from "@/lib/schema"
+import { users, userBranchRoles, branches, roles, staffWorkingHours, staffQualifications, staffServices, services, branchServices, staffServiceCategories } from "@/lib/schema"
 import { eq, inArray, desc, and, isNull } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireAuth, requirePermission, getAdminRoleName } from "@/lib/auth-utils"
@@ -46,7 +46,13 @@ export type StaffServiceAssignment = {
     serviceName?: string
 }
 
-export type UserMinimal = Pick<typeof users.$inferSelect, 'id' | 'name' | 'firstName' | 'lastName' | 'email' | 'role'>
+export type ServiceCategoryAssignment = {
+    branchId: string
+    category: string
+    branchName?: string
+}
+
+export type UserMinimal = Pick<typeof users.$inferSelect, 'id' | 'name' | 'firstName' | 'lastName' | 'email' | 'role' | 'canTakeAppointments'>
 
 export type UserFull = UserMinimal & Pick<typeof users.$inferSelect, 'mobile' | 'dob' | 'image'> & {
     branches: Array<{
@@ -78,6 +84,7 @@ export async function getUsersMinimal(branchId?: string, isSuperUser?: boolean):
                     lastName: users.lastName,
                     email: users.email,
                     role: users.role,
+                    canTakeAppointments: users.canTakeAppointments,
                 })
                 .from(users)
                 .orderBy(desc(users.email))
@@ -91,6 +98,7 @@ export async function getUsersMinimal(branchId?: string, isSuperUser?: boolean):
                     lastName: users.lastName,
                     email: users.email,
                     role: users.role,
+                    canTakeAppointments: users.canTakeAppointments,
                 })
                 .from(users)
                 .innerJoin(userBranchRoles, eq(users.id, userBranchRoles.userId))
@@ -131,6 +139,7 @@ export async function getUserDetails(userId: string): Promise<UserFull | null> {
                 dob: true,
                 image: true,
                 role: true,
+                canTakeAppointments: true,
             }
         })
 
@@ -302,6 +311,7 @@ export async function createUser(data: {
     mobile?: string
     dob?: string
     roleName?: string
+    canTakeAppointments?: boolean
     branchRoleAssignments?: BranchRoleAssignment[]
 }): Promise<ActionResult<{ id: string }>> {
     try {
@@ -339,6 +349,7 @@ export async function createUser(data: {
                 mobile: data.mobile?.trim(),
                 dob: data.dob ? new Date(data.dob) : null,
                 role: isAdmin ? adminRoleName : null,
+                canTakeAppointments: data.canTakeAppointments ?? false,
             })
             .returning()
 
@@ -371,6 +382,7 @@ export async function updateUser(
         mobile?: string
         dob?: string
         roleName?: string
+        canTakeAppointments?: boolean
         branchRoleAssignments?: BranchRoleAssignment[]
     }
 ): Promise<ActionResult<void>> {
@@ -403,6 +415,7 @@ export async function updateUser(
                 mobile: data.mobile?.trim(),
                 dob: data.dob ? new Date(data.dob) : null,
                 role: isAdmin ? adminRoleName : null,
+                canTakeAppointments: data.canTakeAppointments ?? false,
             })
             .where(eq(users.id, id))
 
@@ -671,6 +684,38 @@ export async function getAvailableServicesForStaffBranch(branchId: string) {
 }
 
 /**
+ * Get service categories available for a staff member at a specific branch
+ * (Categories of services that are enabled at the branch)
+ */
+export async function getAvailableServiceCategoriesForBranch(branchId: string) {
+    try {
+        await requireAuth()
+
+        const result = await db
+            .selectDistinct({
+                category: services.category,
+            })
+            .from(branchServices)
+            .innerJoin(services, eq(branchServices.serviceId, services.id))
+            .where(
+                and(
+                    eq(branchServices.branchId, branchId),
+                    eq(branchServices.isActive, true),
+                    eq(services.isActive, true)
+                )
+            )
+            .orderBy(services.category)
+
+        return result
+            .map(r => r.category)
+            .filter((c): c is string => c !== null)
+    } catch (error) {
+        console.error("getAvailableServiceCategoriesForBranch error:", error)
+        return []
+    }
+}
+
+/**
  * Save staff service assignments
  */
 export async function saveStaffServices(userId: string, assignments: StaffServiceAssignment[]): Promise<ActionResult<void>> {
@@ -699,17 +744,70 @@ export async function saveStaffServices(userId: string, assignments: StaffServic
 }
 
 /**
+ * Get service categories assigned to a staff member
+ */
+export async function getStaffServiceCategories(userId: string): Promise<ServiceCategoryAssignment[]> {
+    try {
+        await requireAuth()
+
+        const assignments = await db
+            .select({
+                branchId: staffServiceCategories.branchId,
+                category: staffServiceCategories.category,
+                branchName: branches.name,
+            })
+            .from(staffServiceCategories)
+            .innerJoin(branches, eq(staffServiceCategories.branchId, branches.id))
+            .where(eq(staffServiceCategories.userId, userId))
+
+        return assignments
+    } catch (error) {
+        console.error("getStaffServiceCategories error:", error)
+        return []
+    }
+}
+
+/**
+ * Save staff service category assignments
+ */
+export async function saveStaffServiceCategories(userId: string, assignments: ServiceCategoryAssignment[]): Promise<ActionResult<void>> {
+    try {
+        await requirePermission("users", "edit")
+
+        // Delete existing category assignments for this user
+        await db.delete(staffServiceCategories).where(eq(staffServiceCategories.userId, userId))
+
+        // Insert new assignments
+        if (assignments.length > 0) {
+            await db.insert(staffServiceCategories).values(
+                assignments.map(a => ({
+                    userId,
+                    branchId: a.branchId,
+                    category: a.category,
+                }))
+            )
+        }
+
+        revalidatePath("/management/users")
+        return success(undefined)
+    } catch (error) {
+        return handleActionError(error)
+    }
+}
+
+/**
  * Get extended user details including qualifications and services
  */
 export async function getUserExtendedDetails(userId: string) {
     try {
         await requireAuth()
 
-        const [user, workingHours, qualifications, serviceAssignments] = await Promise.all([
+        const [user, workingHours, qualifications, serviceAssignments, categoryAssignments] = await Promise.all([
             getUserDetails(userId),
             getStaffWorkingHours(userId),
             getStaffQualifications(userId),
             getStaffServices(userId),
+            getStaffServiceCategories(userId),
         ])
 
         if (!user) return null
@@ -719,6 +817,7 @@ export async function getUserExtendedDetails(userId: string) {
             workingHours,
             qualifications,
             staffServices: serviceAssignments,
+            staffServiceCategories: categoryAssignments,
         }
     } catch (error) {
         console.error("getUserExtendedDetails error:", error)

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { createUser, updateUser, deleteUser, getRolesForBranch, getUserDetails, getUsersMinimal, BranchRoleAssignment, getStaffQualifications, getStaffWorkingHours, getStaffServices, saveStaffQualifications, saveStaffWorkingHours, saveStaffServices, getAvailableServicesForStaffBranch, QualificationEntry, WorkingHoursEntry, StaffServiceAssignment } from "@/app/actions/users"
+import { createUser, updateUser, deleteUser, getRolesForBranch, getUserDetails, getUsersMinimal, BranchRoleAssignment, getStaffQualifications, getStaffWorkingHours, getStaffServices, saveStaffQualifications, saveStaffWorkingHours, saveStaffServices, getAvailableServicesForStaffBranch, QualificationEntry, WorkingHoursEntry, StaffServiceAssignment, getStaffServiceCategories, saveStaffServiceCategories, getAvailableServiceCategoriesForBranch, ServiceCategoryAssignment } from "@/app/actions/users"
 import { getBranchOperatingHours, OperatingHoursEntry } from "@/app/actions/branches"
 import { Shield, Building, Edit2, Plus, Trash2, Clock, GraduationCap, Stethoscope, AlertCircle } from "lucide-react"
 import { useExpandableTable } from "@/hooks/useExpandableTable"
@@ -15,6 +15,7 @@ type UserMinimal = {
     lastName: string | null
     email: string
     role: string | null
+    canTakeAppointments: boolean | null
 }
 
 type UserFull = UserMinimal & {
@@ -33,6 +34,7 @@ type UserExpandedData = UserFull & {
     qualifications?: QualificationEntry[]
     workingHours?: WorkingHoursEntry[]
     staffServices?: StaffServiceAssignment[]
+    staffServiceCategories?: ServiceCategoryAssignment[]
 }
 
 type User = UserMinimal
@@ -101,18 +103,21 @@ export default function UsersClient({
 }: UsersClientProps) {
     // Fetch extended user data including qualifications, working hours, and services
     const fetchUserExtendedData = async (userId: string): Promise<UserExpandedData | null> => {
-        const [userDetails, qualifications, workingHours, staffServicesData] = await Promise.all([
+        const [userDetails, qualifications, workingHours, staffServicesData, staffCategoriesData] = await Promise.all([
             getUserDetails(userId),
             getStaffQualifications(userId),
             getStaffWorkingHours(userId),
             getStaffServices(userId),
+            getStaffServiceCategories(userId),
         ])
         if (!userDetails) return null
         return {
             ...userDetails,
             qualifications,
             workingHours,
+            workingHours,
             staffServices: staffServicesData,
+            staffServiceCategories: staffCategoriesData,
         }
     }
 
@@ -142,20 +147,23 @@ export default function UsersClient({
         mobile: "",
         dob: "",
         isAdmin: false,
+        canTakeAppointments: false,
     })
 
     // Qualifications state
     const [qualifications, setQualifications] = useState<QualificationEntry[]>([])
-    
+
     // Working hours state
     const [workingHours, setWorkingHours] = useState<WorkingHoursEntry[]>([])
-    
+
     // Branch operating hours for validation (branchId -> hours)
     const [branchOperatingHoursMap, setBranchOperatingHoursMap] = useState<Record<string, OperatingHoursEntry[]>>({})
-    
+
     // Staff services state
     const [staffServiceAssignments, setStaffServiceAssignments] = useState<Record<string, string[]>>({}) // branchId -> serviceId[]
+    // const [staffCategoryAssignments, setStaffCategoryAssignments] = useState<Record<string, string[]>>({}) // REMOVED: Derived from service assignments
     const [branchServicesMap, setBranchServicesMap] = useState<Record<string, BranchService[]>>({}) // branchId -> available services
+    const [branchCategoriesMap, setBranchCategoriesMap] = useState<Record<string, string[]>>({}) // branchId -> available categories
 
     // Branch-Role assignment state for super user view
     const [branchRoleEntries, setBranchRoleEntries] = useState<BranchRoleFormEntry[]>([])
@@ -192,12 +200,15 @@ export default function UsersClient({
             mobile: "",
             dob: "",
             isAdmin: false,
+            canTakeAppointments: false,
         })
         setBranchRoleEntries([])
         setQualifications([])
         setWorkingHours([])
         setStaffServiceAssignments({})
+        // setStaffCategoryAssignments({}) // REMOVED
         setBranchServicesMap({})
+        setBranchCategoriesMap({})
         setBranchOperatingHoursMap({})
         setActiveTab("details")
         setError(null)
@@ -205,11 +216,17 @@ export default function UsersClient({
 
     const loadBranchServices = async (branchIds: string[]) => {
         const servicesMap: Record<string, BranchService[]> = {}
+        const categoriesMap: Record<string, string[]> = {}
         for (const branchId of branchIds) {
-            const services = await getAvailableServicesForStaffBranch(branchId)
+            const [services, categories] = await Promise.all([
+                getAvailableServicesForStaffBranch(branchId),
+                getAvailableServiceCategoriesForBranch(branchId)
+            ])
             servicesMap[branchId] = services
+            categoriesMap[branchId] = categories
         }
         setBranchServicesMap(servicesMap)
+        setBranchCategoriesMap(categoriesMap)
     }
 
     const openCreate = () => {
@@ -223,10 +240,10 @@ export default function UsersClient({
         setEditingUser(user)
         setIsModalOpen(true)
         setActiveTab("details")
-        
+
         // Load full user details - use the returned data directly instead of reading from state
         const fullUser = await loadExpandedData(user.id, true) as UserExpandedData | null
-        
+
         const isAdmin = user.role === adminRoleName
         setFormData({
             firstName: user.firstName || "",
@@ -235,21 +252,22 @@ export default function UsersClient({
             mobile: fullUser?.mobile || "",
             dob: fullUser?.dob ? new Date(fullUser.dob).toISOString().split('T')[0] : "",
             isAdmin: isAdmin,
+            canTakeAppointments: user.canTakeAppointments ?? false,
         })
-        
+
         if (!isAdmin && fullUser) {
             await initializeBranchRoleEntries(fullUser)
-            
+
             // Load qualifications
             if (fullUser.qualifications) {
                 setQualifications(fullUser.qualifications)
             }
-            
+
             // Load working hours
             if (fullUser.workingHours) {
                 setWorkingHours(fullUser.workingHours)
             }
-            
+
             // Load staff services
             if (fullUser.staffServices) {
                 const serviceMap: Record<string, string[]> = {}
@@ -259,7 +277,10 @@ export default function UsersClient({
                 })
                 setStaffServiceAssignments(serviceMap)
             }
-            
+
+            // Load staff categories - No longer needed as state, derived from services
+            // if (fullUser.staffServiceCategories) { ... }
+
             // Load available services and operating hours for each branch
             const branchIds = fullUser.branches?.map(b => b.id) || []
             if (branchIds.length > 0) {
@@ -272,7 +293,7 @@ export default function UsersClient({
             // User has no existing data, initialize empty branch entries
             await initializeBranchRoleEntries(null)
         }
-        
+
         setError(null)
     }
 
@@ -310,6 +331,7 @@ export default function UsersClient({
                 mobile: formData.mobile,
                 dob: formData.dob,
                 roleName: formData.isAdmin ? adminRoleName : undefined,
+                canTakeAppointments: formData.canTakeAppointments,
                 branchRoleAssignments: formData.isAdmin ? undefined : branchRoleAssignments,
             }
 
@@ -324,15 +346,15 @@ export default function UsersClient({
                 }
                 userId = result.data.id
             }
-            
+
             // Save qualifications, working hours, and services for non-admin users
             if (!formData.isAdmin && userId) {
                 // Save qualifications
                 await saveStaffQualifications(userId, qualifications)
-                
+
                 // Save working hours
                 await saveStaffWorkingHours(userId, workingHours)
-                
+
                 // Save staff services
                 const allStaffServices: { branchId: string; serviceId: string }[] = []
                 Object.entries(staffServiceAssignments).forEach(([branchId, serviceIds]) => {
@@ -341,8 +363,11 @@ export default function UsersClient({
                     })
                 })
                 await saveStaffServices(userId, allStaffServices)
+
+                // NOTE: We no longer save category assignments as they are just UI helpers for selecting services.
+                // The booking logic relies solely on specific staff-service assignments.
             }
-            
+
             // Refresh users list
             await refreshUsers()
             setIsModalOpen(false)
@@ -400,7 +425,7 @@ export default function UsersClient({
     }
 
     const updateQualification = (index: number, field: keyof QualificationEntry, value: any) => {
-        setQualifications(prev => prev.map((q, i) => 
+        setQualifications(prev => prev.map((q, i) =>
             i === index ? { ...q, [field]: value } : q
         ))
     }
@@ -414,10 +439,10 @@ export default function UsersClient({
         const existingSlots = workingHours.filter(
             h => h.branchId === branchId && h.dayOfWeek === dayOfWeek
         )
-        const maxSlotIndex = existingSlots.length > 0 
-            ? Math.max(...existingSlots.map(s => s.slotIndex)) 
+        const maxSlotIndex = existingSlots.length > 0
+            ? Math.max(...existingSlots.map(s => s.slotIndex))
             : -1
-        
+
         setWorkingHours(prev => [...prev, {
             branchId,
             dayOfWeek,
@@ -435,7 +460,7 @@ export default function UsersClient({
     }
 
     const updateWorkingHourSlot = (branchId: string, dayOfWeek: number, slotIndex: number, field: keyof WorkingHoursEntry, value: any) => {
-        setWorkingHours(prev => prev.map(w => 
+        setWorkingHours(prev => prev.map(w =>
             w.branchId === branchId && w.dayOfWeek === dayOfWeek && w.slotIndex === slotIndex
                 ? { ...w, [field]: value }
                 : w
@@ -463,7 +488,7 @@ export default function UsersClient({
         } else {
             // If turning off "off" status, set the first slot to not off
             if (existingSlots.length > 0) {
-                setWorkingHours(prev => prev.map(h => 
+                setWorkingHours(prev => prev.map(h =>
                     h.branchId === branchId && h.dayOfWeek === dayOfWeek && h.slotIndex === 0
                         ? { ...h, isOff: false }
                         : h
@@ -481,24 +506,24 @@ export default function UsersClient({
         return enabledBranches.map(entry => {
             const branchName = branchMap.get(entry.branchId) || entry.branchId
             const branchHoursRef = branchOperatingHoursMap[entry.branchId] || []
-            
+
             const dayData = DAYS_OF_WEEK.map(day => {
                 const slots = workingHours
                     .filter(h => h.branchId === entry.branchId && h.dayOfWeek === day.value)
                     .sort((a, b) => a.slotIndex - b.slotIndex)
                 const isOff = slots.length > 0 && slots[0].isOff
                 const hasSlots = slots.length > 0
-                
+
                 // Get branch hours for this day to show as reference
                 const branchDayHours = branchHoursRef.filter(h => h.dayOfWeek === day.value)
                 const branchClosed = branchDayHours.length > 0 && branchDayHours[0].isClosed
-                const branchHoursDisplay = branchClosed 
-                    ? "Closed" 
+                const branchHoursDisplay = branchClosed
+                    ? "Closed"
                     : branchDayHours.map(h => `${h.openTime}-${h.closeTime}`).join(", ") || "Not set"
-                
+
                 return { day, slots, isOff, hasSlots, branchHoursDisplay, branchClosed }
             })
-            
+
             return { branchId: entry.branchId, branchName, dayData }
         })
     }
@@ -547,9 +572,9 @@ export default function UsersClient({
             const availableSlots = branchDayHours
                 .map(h => `${h.openTime}-${h.closeTime}`)
                 .join(', ')
-            return { 
-                isValid: false, 
-                message: `Must be within branch hours: ${availableSlots}` 
+            return {
+                isValid: false,
+                message: `Must be within branch hours: ${availableSlots}`
             }
         }
 
@@ -576,10 +601,37 @@ export default function UsersClient({
         })
     }
 
+    const toggleStaffCategory = (branchId: string, category: string) => {
+        const branchServices = branchServicesMap[branchId] || []
+        const servicesInCategory = branchServices.filter(s => s.serviceCategory === category)
+        const serviceIdsInCategory = servicesInCategory.map(s => s.serviceId)
+
+        setStaffServiceAssignments(prev => {
+            const current = prev[branchId] || []
+            // Check if all services in this category are already selected
+            const allSelected = serviceIdsInCategory.every(id => current.includes(id))
+
+            let newAssignments: string[]
+            if (allSelected) {
+                // Deselect all
+                newAssignments = current.filter(id => !serviceIdsInCategory.includes(id))
+            } else {
+                // Select all (union)
+                const toAdd = serviceIdsInCategory.filter(id => !current.includes(id))
+                newAssignments = [...current, ...toAdd]
+            }
+
+            return {
+                ...prev,
+                [branchId]: newAssignments
+            }
+        })
+    }
+
     // Handle branch selection change for staff - reload available services and operating hours
     const handleBranchToggle = async (branchId: string) => {
         toggleBranchEnabled(branchId)
-        
+
         // Load services and operating hours for the branch if enabling
         const entry = branchRoleEntries.find(e => e.branchId === branchId)
         if (entry && !entry.enabled) {
@@ -624,7 +676,7 @@ export default function UsersClient({
                         {users.map((user) => {
                             const fullUser = expandedData[user.id]
                             const isAdmin = user.role === adminRoleName
-                            
+
                             return (
                                 <ExpandableTableRow
                                     key={user.id}
@@ -706,33 +758,33 @@ export default function UsersClient({
                                                 <ExpandedDetailRow label="Mobile" value={fullUser?.mobile || '—'} />
                                                 <ExpandedDetailRow label="Date of Birth" value={fullUser?.dob ? new Date(fullUser.dob).toLocaleDateString() : '—'} />
                                             </ExpandedDetailSection>
-                                            
+
                                             <ExpandedDetailSection title="Branch Assignments">
                                                 {fullUser?.branches && fullUser.branches.length > 0 ? (
                                                     fullUser.branches.map(branch => (
-                                                        <ExpandedDetailRow 
+                                                        <ExpandedDetailRow
                                                             key={branch.id}
-                                                            label={branch.name} 
-                                                            value={branch.roleName} 
+                                                            label={branch.name}
+                                                            value={branch.roleName}
                                                         />
                                                     ))
                                                 ) : (
                                                     <ExpandedDetailRow label="Assignments" value="No branch assignments" />
                                                 )}
                                             </ExpandedDetailSection>
-                                            
+
                                             {!isAdmin && fullUser?.qualifications && fullUser.qualifications.length > 0 && (
                                                 <ExpandedDetailSection title="Qualifications">
                                                     {fullUser.qualifications.map((q, idx) => (
-                                                        <ExpandedDetailRow 
+                                                        <ExpandedDetailRow
                                                             key={idx}
-                                                            label={q.type.charAt(0).toUpperCase() + q.type.slice(1)} 
+                                                            label={q.type.charAt(0).toUpperCase() + q.type.slice(1)}
                                                             value={`${q.name}${q.institution ? ` - ${q.institution}` : ''}${q.year ? ` (${q.year})` : ''}`}
                                                         />
                                                     ))}
                                                 </ExpandedDetailSection>
                                             )}
-                                            
+
                                             {!isAdmin && fullUser?.staffServices && fullUser.staffServices.length > 0 && (
                                                 <ExpandedDetailSection title="Services Offered">
                                                     {(() => {
@@ -742,9 +794,9 @@ export default function UsersClient({
                                                             servicesByBranch[s.branchName].push(s.serviceName)
                                                         })
                                                         return Object.entries(servicesByBranch).map(([branchName, services]) => (
-                                                            <ExpandedDetailRow 
+                                                            <ExpandedDetailRow
                                                                 key={branchName}
-                                                                label={branchName} 
+                                                                label={branchName}
                                                                 value={services.join(', ')}
                                                             />
                                                         ))
@@ -771,17 +823,16 @@ export default function UsersClient({
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-lg p-6 max-w-3xl w-full shadow-xl max-h-[90vh] overflow-y-auto">
                         <h2 className="text-xl font-bold mb-4 text-gray-900">{editingUser ? "Edit User" : "Add New User"}</h2>
-                        
+
                         {/* Tab Navigation */}
                         <div className="flex border-b border-gray-200 mb-4">
                             <button
                                 type="button"
                                 onClick={() => setActiveTab("details")}
-                                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                                    activeTab === "details" 
-                                        ? "border-indigo-500 text-indigo-600" 
-                                        : "border-transparent text-gray-500 hover:text-gray-700"
-                                }`}
+                                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === "details"
+                                    ? "border-indigo-500 text-indigo-600"
+                                    : "border-transparent text-gray-500 hover:text-gray-700"
+                                    }`}
                             >
                                 Details
                             </button>
@@ -790,11 +841,10 @@ export default function UsersClient({
                                     <button
                                         type="button"
                                         onClick={() => setActiveTab("qualifications")}
-                                        className={`flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                                            activeTab === "qualifications" 
-                                                ? "border-indigo-500 text-indigo-600" 
-                                                : "border-transparent text-gray-500 hover:text-gray-700"
-                                        }`}
+                                        className={`flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === "qualifications"
+                                            ? "border-indigo-500 text-indigo-600"
+                                            : "border-transparent text-gray-500 hover:text-gray-700"
+                                            }`}
                                     >
                                         <GraduationCap size={16} />
                                         Qualifications
@@ -802,11 +852,10 @@ export default function UsersClient({
                                     <button
                                         type="button"
                                         onClick={() => setActiveTab("workingHours")}
-                                        className={`flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                                            activeTab === "workingHours" 
-                                                ? "border-indigo-500 text-indigo-600" 
-                                                : "border-transparent text-gray-500 hover:text-gray-700"
-                                        }`}
+                                        className={`flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === "workingHours"
+                                            ? "border-indigo-500 text-indigo-600"
+                                            : "border-transparent text-gray-500 hover:text-gray-700"
+                                            }`}
                                     >
                                         <Clock size={16} />
                                         Working Hours
@@ -814,11 +863,10 @@ export default function UsersClient({
                                     <button
                                         type="button"
                                         onClick={() => setActiveTab("services")}
-                                        className={`flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                                            activeTab === "services" 
-                                                ? "border-indigo-500 text-indigo-600" 
-                                                : "border-transparent text-gray-500 hover:text-gray-700"
-                                        }`}
+                                        className={`flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === "services"
+                                            ? "border-indigo-500 text-indigo-600"
+                                            : "border-transparent text-gray-500 hover:text-gray-700"
+                                            }`}
                                     >
                                         <Stethoscope size={16} />
                                         Services
@@ -826,7 +874,7 @@ export default function UsersClient({
                                 </>
                             )}
                         </div>
-                        
+
                         <form onSubmit={handleSubmit} className="space-y-4">
                             {/* Details Tab */}
                             {activeTab === "details" && (
@@ -883,6 +931,21 @@ export default function UsersClient({
                                     </div>
 
                                     <hr className="my-4" />
+
+                                    {/* Appointment Taking Flag */}
+                                    <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-md border border-blue-100 mb-4">
+                                        <input
+                                            id="canTakeAppointments"
+                                            type="checkbox"
+                                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                            checked={formData.canTakeAppointments}
+                                            onChange={(e) => setFormData({ ...formData, canTakeAppointments: e.target.checked })}
+                                        />
+                                        <label htmlFor="canTakeAppointments" className="text-sm font-medium text-blue-800">
+                                            Can Take Appointments?
+                                        </label>
+                                        <span className="text-xs text-blue-600 ml-auto">Show in booking calendar</span>
+                                    </div>
 
                                     {/* Admin Toggle (Super User Only) */}
                                     {isSuperUser && (
@@ -1005,7 +1068,7 @@ export default function UsersClient({
                                             Add Qualification
                                         </button>
                                     </div>
-                                    
+
                                     {qualifications.length === 0 ? (
                                         <p className="text-gray-500 text-sm italic p-4 bg-gray-50 rounded-md">No qualifications added yet. Click "Add Qualification" to add one.</p>
                                     ) : (
@@ -1105,7 +1168,7 @@ export default function UsersClient({
                                     <p className="text-sm text-gray-500">
                                         Set working hours for each branch. Add multiple time slots per day for split schedules (e.g., 9:00-12:00 and 14:00-18:00).
                                     </p>
-                                    
+
                                     {branchRoleEntries.filter(e => e.enabled).length === 0 ? (
                                         <p className="text-gray-500 text-sm italic p-4 bg-yellow-50 rounded-md border border-yellow-200">
                                             Please assign at least one branch in the Details tab first.
@@ -1153,7 +1216,7 @@ export default function UsersClient({
                                                                         )}
                                                                     </div>
                                                                 </div>
-                                                                
+
                                                                 {branchClosed ? (
                                                                     <div className="text-xs text-gray-400 italic ml-28">Branch closed</div>
                                                                 ) : isOff ? (
@@ -1226,7 +1289,7 @@ export default function UsersClient({
                                         <Stethoscope size={16} className="inline mr-1" />
                                         Services Offered by Staff
                                     </label>
-                                    
+
                                     {branchRoleEntries.filter(e => e.enabled).length === 0 ? (
                                         <p className="text-gray-500 text-sm italic p-4 bg-yellow-50 rounded-md border border-yellow-200">
                                             Please assign at least one branch in the Details tab first.
@@ -1236,15 +1299,60 @@ export default function UsersClient({
                                             {branchRoleEntries.filter(e => e.enabled).map(entry => {
                                                 const branchName = branchMap.get(entry.branchId) || entry.branchId
                                                 const services = branchServicesMap[entry.branchId] || []
+                                                const categoriesMap = branchCategoriesMap
                                                 const assignedServices = staffServiceAssignments[entry.branchId] || []
-                                                
+
                                                 return (
                                                     <div key={entry.branchId} className="border rounded-md p-3 bg-gray-50">
                                                         <h4 className="text-sm font-medium text-gray-900 mb-2">
                                                             <Building size={14} className="inline mr-1" />
                                                             {branchName}
                                                         </h4>
-                                                        
+
+                                                        {/* Service Categories */}
+                                                        {categoriesMap[entry.branchId] && categoriesMap[entry.branchId].length > 0 && (
+                                                            <div className="mb-4 pb-4 border-b border-gray-200">
+                                                                <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Service Categories</h5>
+                                                                <p className="text-xs text-gray-500 mb-2">Assigning a category allows the staff to perform ALL services in that category.</p>
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {categoriesMap[entry.branchId].map(category => {
+                                                                        const branchServices = branchServicesMap[entry.branchId] || []
+                                                                        const servicesInCategory = branchServices.filter(s => s.serviceCategory === category)
+                                                                        const serviceIdsInCategory = servicesInCategory.map(s => s.serviceId)
+                                                                        const currentAssignments = staffServiceAssignments[entry.branchId] || []
+
+                                                                        // Check if all services in this category are selected
+                                                                        const isFullySelected = serviceIdsInCategory.length > 0 && serviceIdsInCategory.every(id => currentAssignments.includes(id))
+
+                                                                        // Check if some services are selected (for potential partial state styling, though standard checkbox here)
+                                                                        const isPartiallySelected = !isFullySelected && serviceIdsInCategory.some(id => currentAssignments.includes(id))
+
+                                                                        return (
+                                                                            <label
+                                                                                key={category}
+                                                                                className={`flex items-center gap-2 px-3 py-2 rounded-full cursor-pointer transition-colors border ${isFullySelected
+                                                                                    ? 'bg-green-100 border-green-300 text-green-800'
+                                                                                    : isPartiallySelected
+                                                                                        ? 'bg-blue-50 border-blue-200 text-blue-800'
+                                                                                        : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-700'
+                                                                                    }`}
+                                                                            >
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    className="sr-only"
+                                                                                    checked={isFullySelected}
+                                                                                    onChange={() => toggleStaffCategory(entry.branchId, category)}
+                                                                                />
+                                                                                <span className="text-xs font-medium">{category}</span>
+                                                                            </label>
+                                                                        )
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Individual Services</h5>
+
                                                         {services.length === 0 ? (
                                                             <p className="text-gray-500 text-sm italic">No services configured for this branch.</p>
                                                         ) : (
@@ -1252,11 +1360,10 @@ export default function UsersClient({
                                                                 {services.map(service => (
                                                                     <label
                                                                         key={service.serviceId}
-                                                                        className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
-                                                                            assignedServices.includes(service.serviceId)
-                                                                                ? 'bg-indigo-50 border border-indigo-200'
-                                                                                : 'bg-white border border-gray-200 hover:bg-gray-50'
-                                                                        }`}
+                                                                        className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${assignedServices.includes(service.serviceId)
+                                                                            ? 'bg-indigo-50 border border-indigo-200'
+                                                                            : 'bg-white border border-gray-200 hover:bg-gray-50'
+                                                                            }`}
                                                                     >
                                                                         <input
                                                                             type="checkbox"

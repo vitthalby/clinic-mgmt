@@ -21,6 +21,7 @@ import {
     Mail,
     MapPin,
     Calendar,
+    CalendarPlus,
     Heart,
     AlertCircle,
     User,
@@ -36,6 +37,7 @@ import {
 } from "lucide-react"
 import { ExpandableTableRow, ExpandedDetailRow, ExpandedDetailSection } from "@/components/ui"
 import { PermissionMap } from "@/lib/permissions"
+import AppointmentBookingModal from "./AppointmentBookingModal"
 
 // Constants
 const GENDER_OPTIONS = ["Male", "Female", "Other"]
@@ -78,6 +80,8 @@ export default function CustomersClient({
     const canAdd = permissions.customers?.canAdd ?? false
     const canEdit = permissions.customers?.canEdit ?? false
     const canDelete = permissions.customers?.canDelete ?? false
+    const canBookAppointment = permissions.appointments?.canAdd ?? false
+    
     // List state
     const [customers, setCustomers] = useState<CustomerMinimal[]>(initialCustomers)
     const [total, setTotal] = useState(initialTotal)
@@ -96,6 +100,10 @@ export default function CustomersClient({
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<"basic" | "address" | "medical" | "emergency" | "other">("basic")
+    
+    // Appointment booking modal state
+    const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
+    const [bookingCustomer, setBookingCustomer] = useState<CustomerMinimal | null>(null)
 
     // Form state
     const [formData, setFormData] = useState<CustomerFormData>({
@@ -481,6 +489,19 @@ export default function CustomersClient({
                                                 {customer.isActive ? "Active" : "Inactive"}
                                             </span>,
                                             <div className="flex justify-end gap-2">
+                                                {canBookAppointment && customer.isActive && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            setBookingCustomer(customer)
+                                                            setIsBookingModalOpen(true)
+                                                        }}
+                                                        className="text-green-600 hover:text-green-900"
+                                                        title="Book Appointment"
+                                                    >
+                                                        <CalendarPlus size={16} />
+                                                    </button>
+                                                )}
                                                 {canEdit && (
                                                     <button
                                                         onClick={(e) => {
@@ -1038,6 +1059,31 @@ export default function CustomersClient({
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* Appointment Booking Modal */}
+            {currentBranchId && (
+                <AppointmentBookingModal
+                    isOpen={isBookingModalOpen}
+                    onClose={() => {
+                        setIsBookingModalOpen(false)
+                        setBookingCustomer(null)
+                    }}
+                    onSuccess={() => {
+                        setIsBookingModalOpen(false)
+                        setBookingCustomer(null)
+                    }}
+                    branchId={currentBranchId}
+                    preSelectedCustomer={
+                        bookingCustomer
+                            ? {
+                                  id: bookingCustomer.id,
+                                  name: `${bookingCustomer.firstName} ${bookingCustomer.lastName}`,
+                                  mobile: bookingCustomer.mobile,
+                              }
+                            : undefined
+                    }
+                />
             )}
         </div>
     )
