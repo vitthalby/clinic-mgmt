@@ -190,7 +190,7 @@ export async function createAppointment(
     try {
         // Validate branchId first since it's needed for permission check
         if (!data.branchId) throw new ValidationError("Branch is required")
-        
+
         const user = await requirePermission("appointments", "add", data.branchId)
 
         // Validation
@@ -225,7 +225,7 @@ export async function createAppointment(
             data.staffId,
             appointmentDate
         )
-        
+
         const startMinutes = parseTimeToMinutes(data.startTime)
         const endMinutes = startMinutes + duration
 
@@ -301,37 +301,58 @@ export async function updateAppointment(
             }
         }
 
-        // Handle rescheduling
-        if (data.appointmentDate || data.startTime || data.staffId) {
+        // Handle rescheduling or service change
+        if (data.appointmentDate || data.startTime || data.staffId || data.serviceId) {
             const newDate = data.appointmentDate
                 ? new Date(data.appointmentDate)
                 : existing.appointmentDate
             const newStartTime = data.startTime || existing.startTime
             const newStaffId = data.staffId || existing.staffId
 
-            // Check for conflicts if time or staff changed
-            if (data.startTime || data.staffId) {
-                const existingAppts = await getStaffAppointmentsForDate(
-                    newStaffId,
-                    newDate,
-                    id // Exclude current appointment
-                )
+            // Calculate duration and price if service changes
+            let duration = existing.duration
+            let servicePrice = existing.servicePrice
 
-                const startMinutes = parseTimeToMinutes(newStartTime)
-                const endMinutes = startMinutes + existing.duration
+            if (data.serviceId && data.serviceId !== existing.serviceId) {
+                // Fetch new service details
+                const branchServices = await getBranchServicesFromDB(existing.branchId)
+                const newService = branchServices.find((s) => s.id === data.serviceId)
 
-                const hasConflict = existingAppts.some((appt) => {
-                    const apptStart = parseTimeToMinutes(appt.startTime)
-                    const apptEnd = parseTimeToMinutes(appt.endTime)
-                    return startMinutes < apptEnd && endMinutes > apptStart
-                })
-
-                if (hasConflict) {
-                    throw new ConflictError("This time slot is not available")
+                if (!newService) {
+                    throw new ValidationError("Service not available at this branch")
                 }
 
+                duration = newService.duration
+                servicePrice = newService.price
+                updateData.serviceId = data.serviceId
+                updateData.duration = duration
+                updateData.servicePrice = servicePrice
+            }
+
+            // Check for conflicts
+            const existingAppts = await getStaffAppointmentsForDate(
+                newStaffId,
+                newDate,
+                id // Exclude current appointment
+            )
+
+            const startMinutes = parseTimeToMinutes(newStartTime)
+            const endMinutes = startMinutes + duration
+
+            const hasConflict = existingAppts.some((appt) => {
+                const apptStart = parseTimeToMinutes(appt.startTime)
+                const apptEnd = parseTimeToMinutes(appt.endTime)
+                return startMinutes < apptEnd && endMinutes > apptStart
+            })
+
+            if (hasConflict) {
+                throw new ConflictError("This time slot is not available")
+            }
+
+            // Apply updates
+            if (data.startTime || data.serviceId) {
                 updateData.startTime = newStartTime
-                updateData.endTime = addMinutesToTime(newStartTime, existing.duration)
+                updateData.endTime = addMinutesToTime(newStartTime, duration)
             }
 
             if (data.appointmentDate) {

@@ -23,6 +23,7 @@ import {
     CustomerSearchResult,
     ServiceOption,
     StaffAvailability,
+    updateAppointment,
 } from "@/app/actions/appointments"
 import { managementStyles } from "@/lib/design-tokens"
 
@@ -37,6 +38,15 @@ interface AppointmentBookingModalProps {
         name: string
         mobile: string
     }
+    appointmentId?: string
+    initialData?: {
+        customerId: string
+        customerName: string
+        serviceId: string
+        staffId: string
+        startTime: string
+        notes?: string
+    }
 }
 
 type BookingStep = "customer" | "service" | "datetime"
@@ -48,31 +58,33 @@ export default function AppointmentBookingModal({
     branchId,
     initialDate,
     preSelectedCustomer,
+    appointmentId,
+    initialData,
 }: AppointmentBookingModalProps) {
     // Current step
     const [step, setStep] = useState<BookingStep>("customer")
-    
+
     // Customer
     const [customerSearch, setCustomerSearch] = useState("")
     const [customers, setCustomers] = useState<CustomerSearchResult[]>([])
     const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchResult | null>(null)
     const [isSearching, setIsSearching] = useState(false)
-    
+
     // Service
     const [services, setServices] = useState<ServiceOption[]>([])
     const [selectedService, setSelectedService] = useState<ServiceOption | null>(null)
     const [loadingServices, setLoadingServices] = useState(false)
-    
+
     // Date & Time
     const [selectedDate, setSelectedDate] = useState<Date>(initialDate || new Date())
     const [availability, setAvailability] = useState<StaffAvailability[]>([])
     const [selectedStaffId, setSelectedStaffId] = useState<string>("")
     const [selectedTime, setSelectedTime] = useState<string>("")
     const [loadingSlots, setLoadingSlots] = useState(false)
-    
+
     // Notes
     const [notes, setNotes] = useState("")
-    
+
     // Submission
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -80,7 +92,32 @@ export default function AppointmentBookingModal({
     // Reset state when modal opens/closes
     useEffect(() => {
         if (isOpen) {
-            if (preSelectedCustomer) {
+            if (appointmentId && initialData) {
+                // Edit Mode Configuration
+                setCustomerSearch(initialData.customerName)
+                setCustomers([])
+                setSelectedCustomer({
+                    id: initialData.customerId,
+                    name: initialData.customerName,
+                    mobile: "", // Not needed for display in summary
+                    email: null
+                })
+
+                // We need to load services to find the selected one
+                // This will be handled by the effect watching branchId/step
+
+                setSelectedDate(initialDate || new Date())
+                setSelectedStaffId(initialData.staffId)
+                setSelectedTime(initialData.startTime)
+                setNotes(initialData.notes || "")
+                setError(null)
+
+                // We'll set the step to 'datetime' after services load? 
+                // Actually we need to fetch the service object to have duration/price.
+                // For now, let's just default to 'datetime' and ensure we load valid slot data if possible.
+                setStep("datetime")
+            }
+            else if (preSelectedCustomer) {
                 setSelectedCustomer({
                     id: preSelectedCustomer.id,
                     name: preSelectedCustomer.name,
@@ -92,24 +129,37 @@ export default function AppointmentBookingModal({
                 setStep("customer")
                 setSelectedCustomer(null)
             }
-            setCustomerSearch("")
-            setCustomers([])
-            setSelectedService(null)
-            setSelectedDate(initialDate || new Date())
-            setAvailability([])
-            setSelectedStaffId("")
-            setSelectedTime("")
-            setNotes("")
-            setError(null)
-        }
-    }, [isOpen, preSelectedCustomer, initialDate])
 
-    // Load services when branch changes or when reaching service step
+            if (!appointmentId) {
+                setCustomerSearch("")
+                setCustomers([])
+                setSelectedService(null)
+                setSelectedDate(initialDate || new Date())
+                setAvailability([])
+                setSelectedStaffId("")
+                setSelectedTime("")
+                setNotes("")
+                setError(null)
+            }
+        }
+    }, [isOpen, preSelectedCustomer, initialDate, appointmentId, initialData])
+
+    // Load services when branch changes or when reaching service step OR we are editing
     useEffect(() => {
-        if (isOpen && branchId && step === "service") {
+        if (isOpen && branchId && (step === "service" || appointmentId)) {
             loadServices()
         }
-    }, [isOpen, branchId, step])
+    }, [isOpen, branchId, step, appointmentId])
+
+    // Set selected service when services load if editing
+    useEffect(() => {
+        if (appointmentId && initialData && services.length > 0 && !selectedService) {
+            const found = services.find(s => s.id === initialData.serviceId)
+            if (found) {
+                setSelectedService(found)
+            }
+        }
+    }, [appointmentId, initialData, services, selectedService])
 
     // Load slots when service or date changes
     useEffect(() => {
@@ -157,7 +207,7 @@ export default function AppointmentBookingModal({
 
     const loadAvailableSlots = async () => {
         if (!selectedService) return
-        
+
         setLoadingSlots(true)
         setSelectedStaffId("")
         setSelectedTime("")
@@ -204,15 +254,27 @@ export default function AppointmentBookingModal({
         setError(null)
 
         try {
-            const result = await createAppointment({
-                branchId,
-                customerId: selectedCustomer.id,
-                serviceId: selectedService.id,
-                staffId: selectedStaffId,
-                appointmentDate: selectedDate.toISOString(),
-                startTime: selectedTime,
-                notes: notes || undefined,
-            })
+            let result;
+
+            if (appointmentId) {
+                result = await updateAppointment(appointmentId, {
+                    serviceId: selectedService.id,
+                    staffId: selectedStaffId,
+                    appointmentDate: selectedDate.toISOString(),
+                    startTime: selectedTime,
+                    notes: notes || undefined,
+                })
+            } else {
+                result = await createAppointment({
+                    branchId,
+                    customerId: selectedCustomer.id,
+                    serviceId: selectedService.id,
+                    staffId: selectedStaffId,
+                    appointmentDate: selectedDate.toISOString(),
+                    startTime: selectedTime,
+                    notes: notes || undefined,
+                })
+            }
 
             if (result.success) {
                 onSuccess()
@@ -257,7 +319,7 @@ export default function AppointmentBookingModal({
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
                     <h2 className="text-lg font-semibold text-gray-900">
-                        Book Appointment
+                        {appointmentId ? "Edit Appointment" : "Book Appointment"}
                     </h2>
                     <button
                         onClick={onClose}
@@ -276,138 +338,138 @@ export default function AppointmentBookingModal({
                             isComplete={!!selectedCustomer}
                             icon={<User className="w-4 h-4" />}
                         />
-                                        <ChevronRight className="w-4 h-4 text-gray-300" />
-                                        <StepIndicator
-                                            label="Service"
-                                            isActive={step === "service"}
-                                            isComplete={!!selectedService}
-                                            icon={<Stethoscope className="w-4 h-4" />}
-                                        />
-                                        <ChevronRight className="w-4 h-4 text-gray-300" />
-                                        <StepIndicator
-                                            label="Date & Time"
-                                            isActive={step === "datetime"}
-                                            isComplete={!!selectedTime}
-                                            icon={<Clock className="w-4 h-4" />}
-                                        />
-                                    </div>
-                                </div>
+                        <ChevronRight className="w-4 h-4 text-gray-300" />
+                        <StepIndicator
+                            label="Service"
+                            isActive={step === "service"}
+                            isComplete={!!selectedService}
+                            icon={<Stethoscope className="w-4 h-4" />}
+                        />
+                        <ChevronRight className="w-4 h-4 text-gray-300" />
+                        <StepIndicator
+                            label="Date & Time"
+                            isActive={step === "datetime"}
+                            isComplete={!!selectedTime}
+                            icon={<Clock className="w-4 h-4" />}
+                        />
+                    </div>
+                </div>
 
-                                {/* Content */}
-                                <div className="px-6 py-4 max-h-[60vh] overflow-y-auto">
-                                    {/* Summary of selections */}
-                                    {(selectedCustomer || selectedService) && step !== "customer" && (
-                                        <div className="mb-4 p-3 bg-indigo-50 rounded-lg text-sm">
-                                            <div className="flex flex-wrap gap-4">
-                                                {selectedCustomer && (
-                                                    <div>
-                                                        <span className="text-gray-500">Customer: </span>
-                                                        <span className="font-medium text-gray-900">
-                                                            {selectedCustomer.name}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                                {selectedService && (
-                                                    <div>
-                                                        <span className="text-gray-500">Service: </span>
-                                                        <span className="font-medium text-gray-900">
-                                                            {selectedService.name} ({selectedService.duration} min)
-                                                        </span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Error Display */}
-                                    {error && (
-                                        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg flex items-center gap-2">
-                                            <AlertCircle className="w-4 h-4" />
-                                            {error}
-                                        </div>
-                                    )}
-
-                                    {/* Step Content */}
-                                    {step === "customer" && (
-                                        <CustomerStep
-                                            search={customerSearch}
-                                            onSearchChange={setCustomerSearch}
-                                            customers={customers}
-                                            isSearching={isSearching}
-                                            onSelect={handleSelectCustomer}
-                                        />
-                                    )}
-
-                                    {step === "service" && (
-                                        <ServiceStep
-                                            services={services}
-                                            loading={loadingServices}
-                                            onSelect={handleSelectService}
-                                            formatPrice={formatPrice}
-                                        />
-                                    )}
-
-                                    {step === "datetime" && (
-                                        <DateTimeStep
-                                            selectedDate={selectedDate}
-                                            onDateChange={setSelectedDate}
-                                            availability={availability}
-                                            loading={loadingSlots}
-                                            selectedStaffId={selectedStaffId}
-                                            selectedTime={selectedTime}
-                                            onSelectSlot={handleSelectSlot}
-                                            formatDateForInput={formatDateForInput}
-                                            notes={notes}
-                                            onNotesChange={setNotes}
-                                        />
-                                    )}
-                                </div>
-
-                                {/* Footer */}
-                                <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
+                {/* Content */}
+                <div className="px-6 py-4 max-h-[60vh] overflow-y-auto">
+                    {/* Summary of selections */}
+                    {(selectedCustomer || selectedService) && step !== "customer" && (
+                        <div className="mb-4 p-3 bg-indigo-50 rounded-lg text-sm">
+                            <div className="flex flex-wrap gap-4">
+                                {selectedCustomer && (
                                     <div>
-                                        {step !== "customer" && !preSelectedCustomer && (
-                                            <button
-                                                onClick={goBack}
-                                                className={managementStyles.buttonSecondary}
-                                            >
-                                                Back
-                                            </button>
-                                        )}
-                                        {step === "service" && preSelectedCustomer && (
-                                            <button
-                                                onClick={onClose}
-                                                className={managementStyles.buttonSecondary}
-                                            >
-                                                Cancel
-                                            </button>
-                                        )}
+                                        <span className="text-gray-500">Customer: </span>
+                                        <span className="font-medium text-gray-900">
+                                            {selectedCustomer.name}
+                                        </span>
                                     </div>
-
+                                )}
+                                {selectedService && (
                                     <div>
-                                        {step === "datetime" && selectedTime && (
-                                            <button
-                                                onClick={handleSubmit}
-                                                disabled={isSubmitting}
-                                                className={managementStyles.buttonPrimary}
-                                            >
-                                                {isSubmitting ? (
-                                                    <>
-                                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                                        Booking...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Check className="w-4 h-4" />
-                                                        Confirm Booking
-                                                    </>
-                                                )}
-                                            </button>
-                                        )}
+                                        <span className="text-gray-500">Service: </span>
+                                        <span className="font-medium text-gray-900">
+                                            {selectedService.name} ({selectedService.duration} min)
+                                        </span>
                                     </div>
-                                </div>
+                                )}
                             </div>
                         </div>
+                    )}
+
+                    {/* Error Display */}
+                    {error && (
+                        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4" />
+                            {error}
+                        </div>
+                    )}
+
+                    {/* Step Content */}
+                    {step === "customer" && (
+                        <CustomerStep
+                            search={customerSearch}
+                            onSearchChange={setCustomerSearch}
+                            customers={customers}
+                            isSearching={isSearching}
+                            onSelect={handleSelectCustomer}
+                        />
+                    )}
+
+                    {step === "service" && (
+                        <ServiceStep
+                            services={services}
+                            loading={loadingServices}
+                            onSelect={handleSelectService}
+                            formatPrice={formatPrice}
+                        />
+                    )}
+
+                    {step === "datetime" && (
+                        <DateTimeStep
+                            selectedDate={selectedDate}
+                            onDateChange={setSelectedDate}
+                            availability={availability}
+                            loading={loadingSlots}
+                            selectedStaffId={selectedStaffId}
+                            selectedTime={selectedTime}
+                            onSelectSlot={handleSelectSlot}
+                            formatDateForInput={formatDateForInput}
+                            notes={notes}
+                            onNotesChange={setNotes}
+                        />
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
+                    <div>
+                        {step !== "customer" && !preSelectedCustomer && (
+                            <button
+                                onClick={goBack}
+                                className={managementStyles.buttonSecondary}
+                            >
+                                Back
+                            </button>
+                        )}
+                        {step === "service" && preSelectedCustomer && (
+                            <button
+                                onClick={onClose}
+                                className={managementStyles.buttonSecondary}
+                            >
+                                Cancel
+                            </button>
+                        )}
+                    </div>
+
+                    <div>
+                        {step === "datetime" && selectedTime && (
+                            <button
+                                onClick={handleSubmit}
+                                disabled={isSubmitting}
+                                className={managementStyles.buttonPrimary}
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Booking...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Check className="w-4 h-4" />
+                                        {appointmentId ? "Update Appointment" : "Confirm Booking"}
+                                    </>
+                                )}
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
     )
 }
 
@@ -425,13 +487,12 @@ function StepIndicator({
 }) {
     return (
         <div
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${
-                isActive
-                    ? "bg-indigo-100 text-indigo-700"
-                    : isComplete
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${isActive
+                ? "bg-indigo-100 text-indigo-700"
+                : isComplete
                     ? "text-green-600"
                     : "text-gray-400"
-            }`}
+                }`}
         >
             {isComplete && !isActive ? (
                 <Check className="w-4 h-4" />
@@ -636,7 +697,7 @@ function DateTimeStep({
             {/* Time Slots by Staff */}
             <div>
                 <label className={managementStyles.label}>Select Staff & Time</label>
-                
+
                 {loading ? (
                     <div className="flex items-center justify-center py-8">
                         <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
@@ -666,11 +727,10 @@ function DateTimeStep({
                                             <button
                                                 key={time}
                                                 onClick={() => onSelectSlot(staffAvail.staff.id, time)}
-                                                className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
-                                                    isSelected
-                                                        ? "bg-indigo-600 text-white border-indigo-600"
-                                                        : "border-gray-300 text-gray-700 hover:border-indigo-300 hover:bg-indigo-50"
-                                                }`}
+                                                className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${isSelected
+                                                    ? "bg-indigo-600 text-white border-indigo-600"
+                                                    : "border-gray-300 text-gray-700 hover:border-indigo-300 hover:bg-indigo-50"
+                                                    }`}
                                             >
                                                 {time}
                                             </button>

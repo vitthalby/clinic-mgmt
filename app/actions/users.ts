@@ -32,10 +32,10 @@ export type QualificationEntry = {
     id?: string       // For updates
     type: string      // "degree", "certificate", "license", "specialization"
     name: string      // e.g., "MBBS", "MD Cardiology"
-    institution?: string
-    year?: number
-    expiryDate?: string
-    documentUrl?: string
+    institution?: string | null
+    year?: number | null
+    expiryDate?: string | null
+    documentUrl?: string | null
     isVerified?: boolean
 }
 
@@ -581,9 +581,9 @@ export async function getStaffQualifications(userId: string): Promise<Qualificat
 
         return qualifications.map(q => ({
             ...q,
-            expiryDate: q.expiryDate ? q.expiryDate.toISOString().split('T')[0] : undefined,
+            expiryDate: q.expiryDate ? q.expiryDate.toISOString().split('T')[0] : null,
             isVerified: q.isVerified ?? false,
-        }))
+        })) as QualificationEntry[]
     } catch (error) {
         console.error("getStaffQualifications error:", error)
         return []

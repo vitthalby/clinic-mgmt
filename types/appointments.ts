@@ -18,6 +18,7 @@ export type AppointmentMinimal = {
     serviceId: string
     staffName: string
     staffId: string
+    notes: string | null
 }
 
 // Full appointment details
@@ -119,6 +120,7 @@ export type CreateAppointmentData = {
 export type UpdateAppointmentData = {
     appointmentDate?: string
     startTime?: string
+    serviceId?: string
     staffId?: string
     notes?: string
     status?: AppointmentStatus

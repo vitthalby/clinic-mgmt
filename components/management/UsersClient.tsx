@@ -115,7 +115,6 @@ export default function UsersClient({
             ...userDetails,
             qualifications,
             workingHours,
-            workingHours,
             staffServices: staffServicesData,
             staffServiceCategories: staffCategoriesData,
         }
@@ -341,7 +340,7 @@ export default function UsersClient({
                 userId = editingUser.id
             } else {
                 const result = await createUser(userData)
-                if (!result.success || !result.data?.id) {
+                if (!result.success) {
                     throw new Error(result.error || "Failed to create user")
                 }
                 userId = result.data.id
@@ -790,8 +789,11 @@ export default function UsersClient({
                                                     {(() => {
                                                         const servicesByBranch: Record<string, string[]> = {}
                                                         fullUser.staffServices.forEach(s => {
-                                                            if (!servicesByBranch[s.branchName]) servicesByBranch[s.branchName] = []
-                                                            servicesByBranch[s.branchName].push(s.serviceName)
+                                                            const bName = s.branchName || 'Unknown Branch'
+                                                            if (!servicesByBranch[bName]) servicesByBranch[bName] = []
+                                                            if (s.serviceName) {
+                                                                servicesByBranch[bName].push(s.serviceName)
+                                                            }
                                                         })
                                                         return Object.entries(servicesByBranch).map(([branchName, services]) => (
                                                             <ExpandedDetailRow

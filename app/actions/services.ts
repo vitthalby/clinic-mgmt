@@ -77,7 +77,7 @@ export async function getServicesMinimal(): Promise<ServiceMinimal[]> {
 /**
  * Get all active services (for dropdowns/selection)
  */
-export async function getActiveServices(): Promise<Pick<ServiceMinimal, 'id' | 'name' | 'code' | 'category'>[]> {
+export async function getActiveServices(): Promise<Pick<ServiceMinimal, 'id' | 'name' | 'code' | 'category' | 'defaultDuration' | 'defaultPrice'>[]> {
     try {
         await requireAuth()
 
@@ -87,6 +87,8 @@ export async function getActiveServices(): Promise<Pick<ServiceMinimal, 'id' | '
                 name: services.name,
                 code: services.code,
                 category: services.category,
+                defaultDuration: services.defaultDuration,
+                defaultPrice: services.defaultPrice,
             })
             .from(services)
             .where(eq(services.isActive, true))

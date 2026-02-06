@@ -127,6 +127,7 @@ export async function getAppointmentsForDate(
             serviceName: services.name,
             staffId: appointments.staffId,
             staffName: users.name,
+            notes: appointments.notes,
         })
         .from(appointments)
         .innerJoin(customers, eq(appointments.customerId, customers.id))
@@ -154,6 +155,7 @@ export async function getAppointmentsForDate(
         serviceName: row.serviceName,
         staffId: row.staffId,
         staffName: row.staffName || "Unknown",
+        notes: row.notes,
     }))
 }
 

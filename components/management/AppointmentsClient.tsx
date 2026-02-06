@@ -6,7 +6,9 @@ import {
     getStaffForBranch,
     AppointmentMinimal,
     StaffOption,
+    cancelAppointment,
 } from "@/app/actions/appointments"
+import AppointmentPreviewModal from "./AppointmentPreviewModal"
 import {
     ChevronLeft,
     ChevronRight,
@@ -46,6 +48,40 @@ export default function AppointmentsClient({
     const [selectedStaffId, setSelectedStaffId] = useState<string>("")
     const [isLoading, setIsLoading] = useState(true)
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
+    const [previewAppointment, setPreviewAppointment] = useState<AppointmentMinimal | null>(null)
+    const [editAppointmentData, setEditAppointmentData] = useState<{ id: string, data: any } | null>(null)
+    const [isCancelling, setIsCancelling] = useState(false)
+    const [showCancelled, setShowCancelled] = useState(false)
+
+    // Handlers
+    const handleEdit = (appt: AppointmentMinimal) => {
+        setEditAppointmentData({
+            id: appt.id,
+            data: {
+                customerId: appt.customerId,
+                customerName: appt.customerName,
+                serviceId: appt.serviceId,
+                staffId: appt.staffId,
+                startTime: appt.startTime,
+                notes: appt.notes
+            }
+        })
+        setPreviewAppointment(null)
+        setIsBookingModalOpen(true)
+    }
+
+    const handleCancel = async (appointmentId: string) => {
+        setIsCancelling(true)
+        try {
+            await cancelAppointment(appointmentId)
+            setPreviewAppointment(null)
+            fetchAppointments()
+        } catch (error) {
+            console.error("Failed to cancel appointment:", error)
+        } finally {
+            setIsCancelling(false)
+        }
+    }
 
     // Time slots for the day view (7 AM to 9 PM)
     const timeSlots = useMemo(() => {
@@ -84,29 +120,40 @@ export default function AppointmentsClient({
 
     // Navigation
     const goToToday = () => setSelectedDate(new Date())
-    
+
     const goToPreviousDay = () => {
         const prev = new Date(selectedDate)
         prev.setDate(prev.getDate() - 1)
         setSelectedDate(prev)
     }
-    
+
     const goToNextDay = () => {
         const next = new Date(selectedDate)
         next.setDate(next.getDate() + 1)
         setSelectedDate(next)
     }
 
-    // Filter appointments by staff
+    // Filter appointments by staff and cancelled status
     const filteredAppointments = useMemo(() => {
-        if (!selectedStaffId) return appointments
-        return appointments.filter((a) => a.staffId === selectedStaffId)
-    }, [appointments, selectedStaffId])
+        let filtered = appointments
+
+        // Filter by cancelled status
+        if (!showCancelled) {
+            filtered = filtered.filter(a => a.status !== 'CANCELLED')
+        }
+
+        // Filter by staff
+        if (selectedStaffId) {
+            filtered = filtered.filter(a => a.staffId === selectedStaffId)
+        }
+
+        return filtered
+    }, [appointments, selectedStaffId, showCancelled])
 
     // Group appointments by staff for day view
     const appointmentsByStaff = useMemo(() => {
         const grouped: Record<string, AppointmentMinimal[]> = {}
-        
+
         // Initialize with all staff or just filtered staff
         const displayStaff = selectedStaffId
             ? staff.filter((s) => s.id === selectedStaffId)
@@ -179,21 +226,19 @@ export default function AppointmentsClient({
                     <div className="flex items-center bg-gray-100 rounded-lg p-1">
                         <button
                             onClick={() => setViewMode("day")}
-                            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                                viewMode === "day"
-                                    ? "bg-white shadow text-gray-900"
-                                    : "text-gray-600 hover:text-gray-900"
-                            }`}
+                            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${viewMode === "day"
+                                ? "bg-white shadow text-gray-900"
+                                : "text-gray-600 hover:text-gray-900"
+                                }`}
                         >
                             <Calendar className="w-4 h-4" />
                         </button>
                         <button
                             onClick={() => setViewMode("list")}
-                            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                                viewMode === "list"
-                                    ? "bg-white shadow text-gray-900"
-                                    : "text-gray-600 hover:text-gray-900"
-                            }`}
+                            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${viewMode === "list"
+                                ? "bg-white shadow text-gray-900"
+                                : "text-gray-600 hover:text-gray-900"
+                                }`}
                         >
                             <List className="w-4 h-4" />
                         </button>
@@ -220,7 +265,7 @@ export default function AppointmentsClient({
                     >
                         <ChevronLeft className="w-5 h-5" />
                     </button>
-                    
+
                     <div className="text-center min-w-[200px]">
                         <p className="font-semibold text-gray-900">
                             {formatDate(selectedDate)}
@@ -229,7 +274,7 @@ export default function AppointmentsClient({
                             <span className="text-xs text-indigo-600">Today</span>
                         )}
                     </div>
-                    
+
                     <button
                         onClick={goToNextDay}
                         className="p-2 hover:bg-gray-100 rounded-md"
@@ -247,23 +292,39 @@ export default function AppointmentsClient({
                     )}
                 </div>
 
-                {/* Staff Filter */}
-                <div className="flex items-center gap-2">
-                    <Filter className="w-4 h-4 text-gray-400" />
-                    <select
-                        value={selectedStaffId}
-                        onChange={(e) => setSelectedStaffId(e.target.value)}
-                        className="text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:ring-indigo-500 focus:border-indigo-500"
-                    >
-                        <option value="">All Staff</option>
-                        {staff.map((s) => (
-                            <option key={s.id} value={s.id}>
-                                {s.name}
-                            </option>
-                        ))}
-                    </select>
+                {/* Filters Group */}
+                <div className="flex items-center gap-4">
+                    {/* Show Cancelled Toggle */}
+                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={showCancelled}
+                            onChange={(e) => setShowCancelled(e.target.checked)}
+                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                        />
+                        Show Cancelled
+                    </label>
+
+                    {/* Staff Filter */}
+                    <div className="flex items-center gap-2">
+                        <Filter className="w-4 h-4 text-gray-400" />
+                        <select
+                            value={selectedStaffId}
+                            onChange={(e) => setSelectedStaffId(e.target.value)}
+                            className="text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:ring-indigo-500 focus:border-indigo-500"
+                        >
+                            <option value="">All Staff</option>
+                            {staff.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                    {s.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
             </div>
+
+            {/* Calendar/List Content */}
 
             {/* Calendar/List Content */}
             {isLoading ? (
@@ -278,21 +339,37 @@ export default function AppointmentsClient({
                     appointmentsByStaff={appointmentsByStaff}
                     getAppointmentStyle={getAppointmentStyle}
                     canEdit={canEdit}
+                    onAppointmentClick={setPreviewAppointment}
                 />
             ) : (
                 <ListView
                     appointments={filteredAppointments}
                     canEdit={canEdit}
+                    onAppointmentClick={setPreviewAppointment}
                 />
             )}
 
             {/* Booking Modal */}
             <AppointmentBookingModal
                 isOpen={isBookingModalOpen}
-                onClose={() => setIsBookingModalOpen(false)}
+                onClose={() => {
+                    setIsBookingModalOpen(false)
+                    setEditAppointmentData(null)
+                }}
                 onSuccess={handleBookingSuccess}
                 branchId={branchId}
                 initialDate={selectedDate}
+                appointmentId={editAppointmentData?.id}
+                initialData={editAppointmentData?.data}
+            />
+
+            <AppointmentPreviewModal
+                isOpen={!!previewAppointment}
+                onClose={() => setPreviewAppointment(null)}
+                appointment={previewAppointment}
+                onEdit={handleEdit}
+                onCancel={handleCancel}
+                isCancelling={isCancelling}
             />
         </div>
     )
@@ -305,12 +382,14 @@ function DayView({
     appointmentsByStaff,
     getAppointmentStyle,
     canEdit,
+    onAppointmentClick,
 }: {
     timeSlots: string[]
     staff: StaffOption[]
     appointmentsByStaff: Record<string, AppointmentMinimal[]>
     getAppointmentStyle: (appt: AppointmentMinimal) => { top: string; height: string }
     canEdit: boolean
+    onAppointmentClick: (appt: AppointmentMinimal) => void
 }) {
     if (staff.length === 0) {
         return (
@@ -373,23 +452,61 @@ function DayView({
                                     {appointmentsByStaff[s.id]?.map((appt) => {
                                         const style = getAppointmentStyle(appt)
                                         const statusConfig = appointmentStatusConfig[appt.status]
-                                        
+
                                         return (
                                             <div
                                                 key={appt.id}
-                                                className={`absolute left-1 right-1 rounded-md px-2 py-1 overflow-hidden cursor-pointer hover:ring-2 hover:ring-indigo-400 transition-shadow ${statusConfig.bgColor}`}
+                                                // Outer container: Layout + Positioning (No clipping)
+                                                className={`group absolute left-1 right-1 hover:z-50 transition-all`}
                                                 style={style}
-                                                title={`${appt.customerName} - ${appt.serviceName}`}
                                             >
-                                                <p className={`text-xs font-medium truncate ${statusConfig.textColor}`}>
-                                                    {appt.customerName}
-                                                </p>
-                                                <p className="text-xs text-gray-600 truncate">
-                                                    {appt.serviceName}
-                                                </p>
-                                                <p className="text-xs text-gray-500">
-                                                    {appt.startTime} - {appt.endTime}
-                                                </p>
+                                                {/* Visual Card + Content (Clipped) */}
+                                                <div
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        onAppointmentClick(appt)
+                                                    }}
+                                                    className={`h-full w-full rounded-md px-2 py-1 overflow-hidden cursor-pointer hover:ring-2 hover:ring-indigo-400 transition-shadow ${statusConfig.bgColor}`}
+                                                    title={`${appt.customerName} - ${appt.serviceName}`}
+                                                >
+                                                    <p className={`text-xs font-medium truncate ${statusConfig.textColor}`}>
+                                                        {appt.customerName}
+                                                    </p>
+                                                    <p className="text-xs text-gray-600 truncate">
+                                                        {appt.serviceName}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500">
+                                                        {appt.startTime} - {appt.endTime}
+                                                    </p>
+                                                </div>
+
+                                                {/* Hover Card (Unclipped, Light Theme) */}
+                                                <div
+                                                    className="hidden group-hover:block absolute left-0 bottom-full mb-1 w-56 bg-white text-gray-900 p-3 rounded-lg shadow-xl ring-1 ring-gray-900/5 z-50 pointer-events-none"
+                                                    style={{ marginBottom: '4px' }}
+                                                >
+                                                    <div className="flex items-center justify-between border-b border-gray-100 pb-2 mb-2">
+                                                        <span className="text-xs font-bold text-gray-700">
+                                                            {appt.startTime} - {appt.endTime}
+                                                        </span>
+                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200`}>
+                                                            {appt.duration} min
+                                                        </span>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <div className="text-sm font-semibold text-gray-900">
+                                                            {appt.customerName}
+                                                        </div>
+                                                        <div className="text-xs text-indigo-600 font-medium">
+                                                            {appt.serviceName}
+                                                        </div>
+                                                        <div className="text-[10px] text-gray-500">
+                                                            with {appt.staffName}
+                                                        </div>
+                                                    </div>
+                                                    {/* Arrow */}
+                                                    <div className="absolute top-full left-4 -mt-1 border-4 border-transparent border-t-white" />
+                                                </div>
                                             </div>
                                         )
                                     })}
@@ -407,9 +524,11 @@ function DayView({
 function ListView({
     appointments,
     canEdit,
+    onAppointmentClick,
 }: {
     appointments: AppointmentMinimal[]
     canEdit: boolean
+    onAppointmentClick: (appt: AppointmentMinimal) => void
 }) {
     if (appointments.length === 0) {
         return (
@@ -435,9 +554,13 @@ function ListView({
                 <tbody className={managementStyles.tableBody}>
                     {appointments.map((appt) => {
                         const statusConfig = appointmentStatusConfig[appt.status]
-                        
+
                         return (
-                            <tr key={appt.id} className="hover:bg-gray-50">
+                            <tr
+                                key={appt.id}
+                                className="hover:bg-gray-50 cursor-pointer"
+                                onClick={() => onAppointmentClick(appt)}
+                            >
                                 <td className={managementStyles.tableCell}>
                                     <div className="flex items-center gap-2">
                                         <Clock className="w-4 h-4 text-gray-400" />
