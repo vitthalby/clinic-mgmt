@@ -52,6 +52,8 @@ export default function AppointmentsClient({
     const [editAppointmentData, setEditAppointmentData] = useState<{ id: string, data: any } | null>(null)
     const [isCancelling, setIsCancelling] = useState(false)
     const [showCancelled, setShowCancelled] = useState(false)
+    const [workingHours, setWorkingHours] = useState<Record<string, { startTime: string; endTime: string }[]>>({})
+    const [branchHoliday, setBranchHoliday] = useState<{ name: string; isFullDay: boolean; startTime?: string; endTime?: string } | null>(null)
 
     // Handlers
     const handleEdit = (appt: AppointmentMinimal) => {
@@ -101,12 +103,36 @@ export default function AppointmentsClient({
         loadStaff()
     }, [branchId])
 
-    // Fetch appointments
+    // Fetch appointments, working hours, and holidays
     const fetchAppointments = useCallback(async () => {
         setIsLoading(true)
         try {
-            const data = await getAppointmentsForDay(branchId, selectedDate)
-            setAppointments(data)
+            const [appointmentsData, workingHoursData, holidayData] = await Promise.all([
+                getAppointmentsForDay(branchId, selectedDate),
+                import("@/app/actions/appointments").then(m => m.getStaffWorkingHoursForCalendar(branchId, selectedDate)),
+                import("@/app/actions/holidays").then(m => m.getBranchHolidaysAction(branchId))
+            ])
+
+            setAppointments(appointmentsData)
+            setWorkingHours(workingHoursData)
+
+            // Check if there's a holiday on the selected date
+            const dateStr = selectedDate.toISOString().split('T')[0]
+            const holiday = holidayData.find(h => {
+                const holidayDateStr = new Date(h.date).toISOString().split('T')[0]
+                return holidayDateStr === dateStr
+            })
+
+            if (holiday) {
+                setBranchHoliday({
+                    name: holiday.name,
+                    isFullDay: holiday.isFullDay ?? true,
+                    startTime: holiday.startTime ?? undefined,
+                    endTime: holiday.endTime ?? undefined,
+                })
+            } else {
+                setBranchHoliday(null)
+            }
         } catch (error) {
             console.error("Failed to fetch appointments:", error)
         } finally {
@@ -326,6 +352,25 @@ export default function AppointmentsClient({
 
             {/* Calendar/List Content */}
 
+            {/* Holiday Banner */}
+            {branchHoliday && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center gap-3">
+                    <div className="flex-shrink-0">
+                        <Calendar className="w-5 h-5 text-amber-600" />
+                    </div>
+                    <div className="flex-1">
+                        <h3 className="text-sm font-semibold text-amber-900">
+                            {branchHoliday.name}
+                        </h3>
+                        <p className="text-xs text-amber-700">
+                            {branchHoliday.isFullDay
+                                ? "Branch closed all day"
+                                : `Closed from ${branchHoliday.startTime} to ${branchHoliday.endTime}`}
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Calendar/List Content */}
             {isLoading ? (
                 <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
@@ -337,6 +382,8 @@ export default function AppointmentsClient({
                     timeSlots={timeSlots}
                     staff={selectedStaffId ? staff.filter(s => s.id === selectedStaffId) : staff}
                     appointmentsByStaff={appointmentsByStaff}
+                    workingHours={workingHours}
+                    branchHoliday={branchHoliday}
                     getAppointmentStyle={getAppointmentStyle}
                     canEdit={canEdit}
                     onAppointmentClick={setPreviewAppointment}
@@ -380,6 +427,8 @@ function DayView({
     timeSlots,
     staff,
     appointmentsByStaff,
+    workingHours,
+    branchHoliday,
     getAppointmentStyle,
     canEdit,
     onAppointmentClick,
@@ -387,10 +436,51 @@ function DayView({
     timeSlots: string[]
     staff: StaffOption[]
     appointmentsByStaff: Record<string, AppointmentMinimal[]>
+    workingHours: Record<string, { startTime: string; endTime: string }[]>
+    branchHoliday: { name: string; isFullDay: boolean; startTime?: string; endTime?: string } | null
     getAppointmentStyle: (appt: AppointmentMinimal) => { top: string; height: string }
     canEdit: boolean
     onAppointmentClick: (appt: AppointmentMinimal) => void
 }) {
+    // Helper function to check if a time is within working hours
+    const isWithinWorkingHours = (staffId: string, time: string): boolean => {
+        // Check for branch holiday first
+        if (branchHoliday) {
+            if (branchHoliday.isFullDay) {
+                return false // Full day holiday - no working hours
+            }
+
+            // Check if time falls within partial holiday hours
+            if (branchHoliday.startTime && branchHoliday.endTime) {
+                const timeMinutes = parseTimeToMinutes(time)
+                const holidayStart = parseTimeToMinutes(branchHoliday.startTime)
+                const holidayEnd = parseTimeToMinutes(branchHoliday.endTime)
+
+                // If time is within holiday hours, it's not working time
+                if (timeMinutes >= holidayStart && timeMinutes < holidayEnd) {
+                    return false
+                }
+            }
+        }
+
+        // Check staff working hours
+        const hours = workingHours[staffId]
+        if (!hours || hours.length === 0) return false
+
+        const timeMinutes = parseTimeToMinutes(time)
+        return hours.some(slot => {
+            const startMinutes = parseTimeToMinutes(slot.startTime)
+            const endMinutes = parseTimeToMinutes(slot.endTime)
+            return timeMinutes >= startMinutes && timeMinutes < endMinutes
+        })
+    }
+
+    // Helper to parse time to minutes
+    const parseTimeToMinutes = (time: string): number => {
+        const [hours, minutes] = time.split(':').map(Number)
+        return hours * 60 + minutes
+    }
+
     if (staff.length === 0) {
         return (
             <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
@@ -440,13 +530,27 @@ function DayView({
                                     key={s.id}
                                     className="flex-1 min-w-[200px] relative border-l border-gray-200"
                                 >
-                                    {/* Hour grid lines */}
-                                    {timeSlots.map((time) => (
-                                        <div
-                                            key={time}
-                                            className="h-16 border-b border-gray-100"
-                                        />
-                                    ))}
+                                    {/* Hour grid lines with working hours indicators */}
+                                    {timeSlots.map((time) => {
+                                        const isWorking = isWithinWorkingHours(s.id, time)
+                                        return (
+                                            <div
+                                                key={time}
+                                                className={`h-16 border-b border-gray-100 relative ${!isWorking ? 'bg-gray-50' : ''
+                                                    }`}
+                                            >
+                                                {/* Non-working hours overlay */}
+                                                {!isWorking && (
+                                                    <div
+                                                        className="absolute inset-0 opacity-30"
+                                                        style={{
+                                                            backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(156, 163, 175, 0.1) 10px, rgba(156, 163, 175, 0.1) 20px)'
+                                                        }}
+                                                    />
+                                                )}
+                                            </div>
+                                        )
+                                    })}
 
                                     {/* Appointments */}
                                     {appointmentsByStaff[s.id]?.map((appt) => {

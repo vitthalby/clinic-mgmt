@@ -494,13 +494,20 @@ export async function getAvailableSlots(options: {
     const { branchId, serviceId, date, excludeAppointmentId } = options
     const dayOfWeek = date.getDay()
 
-    // 1. Get branch hours for this day
+    // 1. Check for branch holiday on this date
+    const { getBranchHolidayForDate } = await import("./holidays")
+    const branchHoliday = await getBranchHolidayForDate(branchId, date)
+    if (branchHoliday && branchHoliday.isFullDay) {
+        return [] // Branch is closed for the entire day
+    }
+
+    // 2. Get branch hours for this day
     const branchHours = await getBranchHoursForDay(branchId, dayOfWeek)
     if (branchHours.length === 0 || branchHours[0].isClosed) {
         return [] // Branch is closed
     }
 
-    // 2. Get service duration
+    // 3. Get service duration
     const serviceResult = await db
         .select({
             defaultDuration: services.defaultDuration,
@@ -524,14 +531,21 @@ export async function getAvailableSlots(options: {
         serviceResult[0].defaultDuration ??
         30
 
-    // 3. Get qualified staff
+    // 4. Get qualified staff
     const qualifiedStaff = await getQualifiedStaffForService(branchId, serviceId)
     if (qualifiedStaff.length === 0) return []
 
-    // 4. For each staff member, calculate available slots
+    // 5. For each staff member, calculate available slots
     const availability: StaffAvailability[] = []
+    const { getStaffHolidayForDate, isTimeSlotBlockedByHoliday } = await import("./holidays")
 
     for (const staff of qualifiedStaff) {
+        // Check for staff holiday on this date
+        const staffHoliday = await getStaffHolidayForDate(staff.id, branchId, date)
+        if (staffHoliday && staffHoliday.isFullDay) {
+            continue // Staff is off for the entire day
+        }
+
         // Get staff working hours
         const staffHours = await getStaffHoursForDay(staff.id, branchId, dayOfWeek)
 
@@ -574,14 +588,27 @@ export async function getAvailableSlots(options: {
             date
         )
 
-        if (slots.length > 0) {
+        // Filter out slots that conflict with holidays
+        let filteredSlots = slots
+        if (branchHoliday && !branchHoliday.isFullDay) {
+            filteredSlots = filteredSlots.filter(
+                (slot) => !isTimeSlotBlockedByHoliday(branchHoliday, slot.time, slot.endTime)
+            )
+        }
+        if (staffHoliday && !staffHoliday.isFullDay) {
+            filteredSlots = filteredSlots.filter(
+                (slot) => !isTimeSlotBlockedByHoliday(staffHoliday, slot.time, slot.endTime)
+            )
+        }
+
+        if (filteredSlots.length > 0) {
             availability.push({
                 staff: {
                     id: staff.id,
                     name: staff.name,
                     image: staff.image,
                 },
-                slots,
+                slots: filteredSlots,
             })
         }
     }

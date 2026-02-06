@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createBranch, updateBranch, deleteBranch, getBranchFeatures, getBranchDetails, getBranchesMinimal, getBranchOperatingHours, getBranchServices, OperatingHoursEntry, BranchServiceAssignment } from "@/app/actions/branches"
-import { Plus, Edit2, Trash2, CheckCircle, XCircle, Clock, Stethoscope } from "lucide-react"
+import { Plus, Edit2, Trash2, CheckCircle, XCircle, Clock, Stethoscope, Calendar } from "lucide-react"
 import { useActionState } from "@/hooks/useActionState"
 import { useExpandableTable } from "@/hooks/useExpandableTable"
 import { ActionError, ExpandableTableRow, ExpandedDetailRow, ExpandedDetailSection } from "@/components/ui"
@@ -87,8 +87,8 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
             getBranchServices(id),
         ])
         if (!details) return null
-        return { 
-            details: details as BranchFull, 
+        return {
+            details: details as BranchFull,
             features,
             operatingHours,
             branchServices: branchServicesData,
@@ -113,13 +113,23 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
     const [featureAssignments, setFeatureAssignments] = useState<Record<string, boolean>>({})
     const [operatingHours, setOperatingHours] = useState<OperatingHoursEntry[]>(DEFAULT_OPERATING_HOURS)
     const [branchServiceAssignments, setBranchServiceAssignments] = useState<Record<string, { enabled: boolean; price: string; duration: string }>>({})
-    const [activeTab, setActiveTab] = useState<"details" | "hours" | "features" | "services">("details")
+    const [activeTab, setActiveTab] = useState<"details" | "hours" | "features" | "services" | "holidays">("details")
     const [loadingFeatures, setLoadingFeatures] = useState(false)
+    const [holidays, setHolidays] = useState<any[]>([])
+    const [isAddingHoliday, setIsAddingHoliday] = useState(false)
+    const [holidayForm, setHolidayForm] = useState({
+        date: "",
+        name: "",
+        isFullDay: true,
+        startTime: "09:00",
+        endTime: "18:00",
+        notes: "",
+    })
     const { execute, isLoading, error, clearError } = useActionState<{ id: string } | void>()
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        
+
         // Convert feature assignments to array format
         const featureAssignmentArray: FeatureAssignment[] = Object.entries(featureAssignments).map(
             ([featureId, isEnabled]) => ({ featureId, isEnabled })
@@ -164,6 +174,16 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
         setFeatureAssignments({})
         setOperatingHours(DEFAULT_OPERATING_HOURS)
         setBranchServiceAssignments({})
+        setHolidays([])
+        setIsAddingHoliday(false)
+        setHolidayForm({
+            date: "",
+            name: "",
+            isFullDay: true,
+            startTime: "09:00",
+            endTime: "18:00",
+            notes: "",
+        })
         setActiveTab("details")
         clearError()
     }
@@ -183,10 +203,10 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
         setEditingBranch(branch)
         setIsModalOpen(true)
         setActiveTab("details")
-        
+
         // Load all expanded data - use returned data directly instead of reading from state
         const expanded = await loadExpandedData(branch.id, true) as BranchExpandedData | null
-        
+
         setFormData({
             name: branch.name,
             address: expanded?.details.address || "",
@@ -195,7 +215,7 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
             pinCode: expanded?.details.pinCode || "",
             state: branch.state || ""
         })
-        
+
         // Set feature assignments from expanded data
         if (expanded?.features) {
             const assignments: Record<string, boolean> = {}
@@ -211,7 +231,7 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
             // Ensure each day has at least one entry
             const hoursFromDb = expanded.operatingHours
             const daysWithHours = new Set(hoursFromDb.map(h => h.dayOfWeek))
-            
+
             // Add default entries for days without any hours
             const missingDays = DAYS_OF_WEEK
                 .filter(d => !daysWithHours.has(d.value))
@@ -222,7 +242,7 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                     closeTime: "18:00",
                     isClosed: d.value === 0, // Sunday closed by default
                 }))
-            
+
             setOperatingHours([...hoursFromDb, ...missingDays])
         } else {
             setOperatingHours(DEFAULT_OPERATING_HOURS)
@@ -240,6 +260,10 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
             })
             setBranchServiceAssignments(serviceAssignments)
         }
+
+        // Load holidays
+        const holidaysData = await import("@/app/actions/holidays").then(m => m.getBranchHolidaysAction(branch.id))
+        setHolidays(holidaysData)
     }
 
     const openCreate = () => {
@@ -275,8 +299,8 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
 
     const updateOperatingHour = (dayOfWeek: number, slotIndex: number, field: keyof OperatingHoursEntry, value: string | boolean) => {
         setOperatingHours(prev => prev.map(hour =>
-            hour.dayOfWeek === dayOfWeek && hour.slotIndex === slotIndex 
-                ? { ...hour, [field]: value } 
+            hour.dayOfWeek === dayOfWeek && hour.slotIndex === slotIndex
+                ? { ...hour, [field]: value }
                 : hour
         ))
     }
@@ -294,7 +318,7 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
     }
 
     const removeTimeSlot = (dayOfWeek: number, slotIndex: number) => {
-        setOperatingHours(prev => prev.filter(h => 
+        setOperatingHours(prev => prev.filter(h =>
             !(h.dayOfWeek === dayOfWeek && h.slotIndex === slotIndex)
         ))
     }
@@ -314,7 +338,7 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
             })
         } else {
             // When opening a day, set first slot to open
-            setOperatingHours(prev => prev.map(h => 
+            setOperatingHours(prev => prev.map(h =>
                 h.dayOfWeek === dayOfWeek && h.slotIndex === 0
                     ? { ...h, isClosed: false }
                     : h
@@ -383,7 +407,7 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                             const expanded = expandedData[branch.id]
                             const branchFeatures = expanded?.features || []
                             const enabledFeatures = branchFeatures.filter((f: any) => f.isEnabled)
-                            
+
                             return (
                                 <ExpandableTableRow
                                     key={branch.id}
@@ -402,15 +426,15 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                                             </span>
                                         ),
                                         <div className="flex justify-end gap-2">
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); openEdit(branch); }} 
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); openEdit(branch); }}
                                                 className="text-indigo-600 hover:text-indigo-900"
                                                 title="Edit Branch"
                                             >
                                                 <Edit2 size={16} />
                                             </button>
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); handleDelete(branch); }} 
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleDelete(branch); }}
                                                 className="text-red-600 hover:text-red-900"
                                                 title="Delete Branch"
                                             >
@@ -427,7 +451,7 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                                                 <ExpandedDetailRow label="Pin Code" value={expanded?.details.pinCode} />
                                                 <ExpandedDetailRow label="State" value={expanded?.details.state} />
                                             </ExpandedDetailSection>
-                                            
+
                                             <ExpandedDetailSection title="Operating Hours">
                                                 {expanded?.operatingHours && expanded.operatingHours.length > 0 ? (
                                                     // Group by day and display multiple slots
@@ -435,19 +459,19 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                                                         const daySlots = expanded.operatingHours
                                                             .filter((h: OperatingHoursEntry) => h.dayOfWeek === day.value)
                                                             .sort((a: OperatingHoursEntry, b: OperatingHoursEntry) => a.slotIndex - b.slotIndex)
-                                                        
+
                                                         if (daySlots.length === 0) return null
-                                                        
+
                                                         const isClosed = daySlots[0].isClosed
-                                                        const slotsDisplay = isClosed 
-                                                            ? 'Closed' 
+                                                        const slotsDisplay = isClosed
+                                                            ? 'Closed'
                                                             : daySlots.map((h: OperatingHoursEntry) => `${h.openTime} - ${h.closeTime}`).join(', ')
-                                                        
+
                                                         return (
-                                                            <ExpandedDetailRow 
+                                                            <ExpandedDetailRow
                                                                 key={day.value}
-                                                                label={day.label} 
-                                                                value={slotsDisplay} 
+                                                                label={day.label}
+                                                                value={slotsDisplay}
                                                             />
                                                         )
                                                     })
@@ -455,11 +479,11 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                                                     <ExpandedDetailRow label="Hours" value="Not configured" />
                                                 )}
                                             </ExpandedDetailSection>
-                                            
+
                                             <ExpandedDetailSection title="Services Offered">
-                                                <ExpandedDetailRow 
-                                                    label="Active Services" 
-                                                    value={`${expanded?.branchServices?.length || 0} services`} 
+                                                <ExpandedDetailRow
+                                                    label="Active Services"
+                                                    value={`${expanded?.branchServices?.length || 0} services`}
                                                 />
                                                 {expanded?.branchServices && expanded.branchServices.length > 0 && (
                                                     <div className="mt-2">
@@ -480,9 +504,9 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                                             </ExpandedDetailSection>
 
                                             <ExpandedDetailSection title="Features">
-                                                <ExpandedDetailRow 
-                                                    label="Enabled Features" 
-                                                    value={`${enabledFeatures.length} / ${allFeatures.length}`} 
+                                                <ExpandedDetailRow
+                                                    label="Enabled Features"
+                                                    value={`${enabledFeatures.length} / ${allFeatures.length}`}
                                                 />
                                                 {branchFeatures.length > 0 && (
                                                     <div className="mt-2">
@@ -499,15 +523,15 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                                                     </div>
                                                 )}
                                             </ExpandedDetailSection>
-                                            
+
                                             <ExpandedDetailSection title="Audit Information">
-                                                <ExpandedDetailRow 
-                                                    label="Created" 
-                                                    value={expanded?.details.createdAt ? `${new Date(expanded.details.createdAt).toLocaleDateString()} by ${expanded.details.createdByName || 'Unknown'}` : '—'} 
+                                                <ExpandedDetailRow
+                                                    label="Created"
+                                                    value={expanded?.details.createdAt ? `${new Date(expanded.details.createdAt).toLocaleDateString()} by ${expanded.details.createdByName || 'Unknown'}` : '—'}
                                                 />
-                                                <ExpandedDetailRow 
-                                                    label="Last Updated" 
-                                                    value={expanded?.details.updatedAt ? `${new Date(expanded.details.updatedAt).toLocaleDateString()} by ${expanded.details.updatedByName || 'Unknown'}` : '—'} 
+                                                <ExpandedDetailRow
+                                                    label="Last Updated"
+                                                    value={expanded?.details.updatedAt ? `${new Date(expanded.details.updatedAt).toLocaleDateString()} by ${expanded.details.updatedByName || 'Unknown'}` : '—'}
                                                 />
                                             </ExpandedDetailSection>
                                         </div>
@@ -530,7 +554,7 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-lg p-6 max-w-4xl w-full shadow-xl max-h-[90vh] overflow-y-auto">
                         <h2 className="text-xl font-bold mb-4 text-gray-900">{editingBranch ? "Edit Branch" : "Add Branch"}</h2>
-                        
+
                         <ActionError error={error} onDismiss={clearError} className="mb-4" />
 
                         {/* Tabs */}
@@ -540,23 +564,23 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                                 { key: "hours", label: "Operating Hours", icon: Clock },
                                 { key: "services", label: `Services (${enabledServicesCount})`, icon: Stethoscope },
                                 { key: "features", label: `Features (${enabledCount})` },
+                                { key: "holidays", label: `Holidays (${holidays.length})`, icon: Calendar },
                             ].map((tab) => (
                                 <button
                                     key={tab.key}
                                     type="button"
                                     onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                                    className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1 ${
-                                        activeTab === tab.key
-                                            ? "border-indigo-500 text-indigo-600"
-                                            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                                    }`}
+                                    className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1 ${activeTab === tab.key
+                                        ? "border-indigo-500 text-indigo-600"
+                                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                                        }`}
                                 >
                                     {tab.icon && <tab.icon size={14} />}
                                     {tab.label}
                                 </button>
                             ))}
                         </div>
-                        
+
                         <form onSubmit={handleSubmit} className="space-y-6">
                             {/* Branch Details Tab */}
                             {activeTab === "details" && (
@@ -654,7 +678,7 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                                                         </button>
                                                     )}
                                                 </div>
-                                                
+
                                                 {!isClosed && (
                                                     <div className="space-y-2">
                                                         {slots.map((slot, idx) => (
@@ -707,11 +731,10 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                                                 const assignment = branchServiceAssignments[service.id]
                                                 const isEnabled = assignment?.enabled
                                                 return (
-                                                    <div 
-                                                        key={service.id} 
-                                                        className={`p-3 rounded-lg border transition-colors ${
-                                                            isEnabled ? "border-green-500 bg-green-50" : "border-gray-200"
-                                                        }`}
+                                                    <div
+                                                        key={service.id}
+                                                        className={`p-3 rounded-lg border transition-colors ${isEnabled ? "border-green-500 bg-green-50" : "border-gray-200"
+                                                            }`}
                                                     >
                                                         <div className="flex items-start gap-3">
                                                             <input
@@ -794,7 +817,7 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                                             </button>
                                         </div>
                                     </div>
-                                    
+
                                     {loadingFeatures ? (
                                         <div className="text-center py-4 text-gray-500 text-sm">Loading features...</div>
                                     ) : (
@@ -802,11 +825,10 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                                             {allFeatures.map((feature) => (
                                                 <label
                                                     key={feature.id}
-                                                    className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                                                        featureAssignments[feature.id]
-                                                            ? "border-indigo-500 bg-indigo-50"
-                                                            : "border-gray-200 hover:border-gray-300"
-                                                    }`}
+                                                    className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${featureAssignments[feature.id]
+                                                        ? "border-indigo-500 bg-indigo-50"
+                                                        : "border-gray-200 hover:border-gray-300"
+                                                        }`}
                                                 >
                                                     <input
                                                         type="checkbox"
@@ -824,10 +846,216 @@ export default function BranchesClient({ branches: initialBranches, allFeatures,
                                             ))}
                                         </div>
                                     )}
-                                    
+
                                     {allFeatures.length === 0 && !loadingFeatures && (
                                         <div className="text-center py-4 text-gray-500 text-sm">
                                             No features available. Please add features first.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Holidays Tab */}
+                            {activeTab === "holidays" && editingBranch && (
+                                <div>
+                                    <p className="text-sm text-gray-500 mb-4">
+                                        Manage branch holidays and closures. These will prevent appointment bookings on the specified dates.
+                                    </p>
+
+                                    {/* Add Holiday Button */}
+                                    {!isAddingHoliday && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsAddingHoliday(true)}
+                                            className="mb-4 flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800"
+                                        >
+                                            <Plus size={16} />
+                                            Add Holiday
+                                        </button>
+                                    )}
+
+                                    {/* Add Holiday Form */}
+                                    {isAddingHoliday && (
+                                        <div className="mb-4 p-4 border border-indigo-200 rounded-lg bg-indigo-50">
+                                            <h4 className="text-sm font-medium text-gray-900 mb-3">New Holiday</h4>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Date *</label>
+                                                    <input
+                                                        type="date"
+                                                        value={holidayForm.date}
+                                                        onChange={(e) => setHolidayForm({ ...holidayForm, date: e.target.value })}
+                                                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Name *</label>
+                                                    <input
+                                                        type="text"
+                                                        value={holidayForm.name}
+                                                        onChange={(e) => setHolidayForm({ ...holidayForm, name: e.target.value })}
+                                                        placeholder="e.g., Christmas, Diwali"
+                                                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                    />
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="flex items-center gap-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={holidayForm.isFullDay}
+                                                            onChange={(e) => setHolidayForm({ ...holidayForm, isFullDay: e.target.checked })}
+                                                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                                        />
+                                                        <span className="text-sm text-gray-700">Full day closure</span>
+                                                    </label>
+                                                </div>
+                                                {!holidayForm.isFullDay && (
+                                                    <>
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-700 mb-1">Start Time</label>
+                                                            <input
+                                                                type="time"
+                                                                value={holidayForm.startTime}
+                                                                onChange={(e) => setHolidayForm({ ...holidayForm, startTime: e.target.value })}
+                                                                className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-700 mb-1">End Time</label>
+                                                            <input
+                                                                type="time"
+                                                                value={holidayForm.endTime}
+                                                                onChange={(e) => setHolidayForm({ ...holidayForm, endTime: e.target.value })}
+                                                                className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                            />
+                                                        </div>
+                                                    </>
+                                                )}
+                                                <div className="col-span-2">
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+                                                    <textarea
+                                                        value={holidayForm.notes}
+                                                        onChange={(e) => setHolidayForm({ ...holidayForm, notes: e.target.value })}
+                                                        rows={2}
+                                                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-2"
+                                                        placeholder="Optional notes about this holiday"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end gap-2 mt-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setIsAddingHoliday(false)
+                                                        setHolidayForm({
+                                                            date: "",
+                                                            name: "",
+                                                            isFullDay: true,
+                                                            startTime: "09:00",
+                                                            endTime: "18:00",
+                                                            notes: "",
+                                                        })
+                                                    }}
+                                                    className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={async () => {
+                                                        if (!holidayForm.date || !holidayForm.name) {
+                                                            alert("Please fill in all required fields")
+                                                            return
+                                                        }
+                                                        const { createBranchHoliday } = await import("@/app/actions/holidays")
+                                                        const result = await createBranchHoliday(editingBranch.id, holidayForm)
+                                                        if (result.success) {
+                                                            const { getBranchHolidaysAction } = await import("@/app/actions/holidays")
+                                                            const updatedHolidays = await getBranchHolidaysAction(editingBranch.id)
+                                                            setHolidays(updatedHolidays)
+                                                            setIsAddingHoliday(false)
+                                                            setHolidayForm({
+                                                                date: "",
+                                                                name: "",
+                                                                isFullDay: true,
+                                                                startTime: "09:00",
+                                                                endTime: "18:00",
+                                                                notes: "",
+                                                            })
+                                                        } else {
+                                                            alert(result.error?.message || "Failed to add holiday")
+                                                        }
+                                                    }}
+                                                    className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+                                                >
+                                                    Add Holiday
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Holidays List */}
+                                    {holidays.length === 0 ? (
+                                        <div className="text-center py-8 text-gray-500 text-sm">
+                                            No holidays configured. Add one to get started.
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {holidays
+                                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                                .map((holiday) => (
+                                                    <div
+                                                        key={holiday.id}
+                                                        className="p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
+                                                    >
+                                                        <div className="flex items-start justify-between">
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-medium text-gray-900">{holiday.name}</span>
+                                                                    {holiday.isFullDay ? (
+                                                                        <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
+                                                                            Full Day
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">
+                                                                            {holiday.startTime} - {holiday.endTime}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="text-sm text-gray-600 mt-1">
+                                                                    {new Date(holiday.date).toLocaleDateString('en-US', {
+                                                                        weekday: 'long',
+                                                                        year: 'numeric',
+                                                                        month: 'long',
+                                                                        day: 'numeric'
+                                                                    })}
+                                                                </div>
+                                                                {holiday.notes && (
+                                                                    <div className="text-xs text-gray-500 mt-1">{holiday.notes}</div>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={async () => {
+                                                                    if (!confirm(`Delete holiday "${holiday.name}"?`)) return
+                                                                    const { deleteBranchHoliday } = await import("@/app/actions/holidays")
+                                                                    const result = await deleteBranchHoliday(holiday.id, editingBranch.id)
+                                                                    if (result.success) {
+                                                                        const { getBranchHolidaysAction } = await import("@/app/actions/holidays")
+                                                                        const updatedHolidays = await getBranchHolidaysAction(editingBranch.id)
+                                                                        setHolidays(updatedHolidays)
+                                                                    } else {
+                                                                        alert(result.error?.message || "Failed to delete holiday")
+                                                                    }
+                                                                }}
+                                                                className="text-red-600 hover:text-red-800"
+                                                                title="Delete holiday"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                         </div>
                                     )}
                                 </div>

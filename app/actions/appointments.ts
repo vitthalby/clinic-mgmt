@@ -439,6 +439,51 @@ export async function deleteAppointment(id: string): Promise<ActionResult> {
     }
 }
 
+/**
+ * Get staff working hours for calendar display
+ */
+export async function getStaffWorkingHoursForCalendar(
+    branchId: string,
+    date: Date
+): Promise<Record<string, { startTime: string; endTime: string }[]>> {
+    try {
+        await requirePermission("appointments", "view", branchId)
+
+        const { getStaffHoursForDay } = await import("@/lib/data-access/appointments")
+        const { getBranchHoursForDay } = await import("@/lib/data-access/appointments")
+
+        const dayOfWeek = date.getDay()
+        const staff = await getStaffForBranchFromDB(branchId)
+        const branchHours = await getBranchHoursForDay(branchId, dayOfWeek)
+
+        const workingHours: Record<string, { startTime: string; endTime: string }[]> = {}
+
+        for (const staffMember of staff) {
+            const staffHours = await getStaffHoursForDay(staffMember.id, branchId, dayOfWeek)
+
+            if (staffHours.length > 0 && staffHours[0].isOff) {
+                // Staff is off this day
+                workingHours[staffMember.id] = []
+            } else if (staffHours.length > 0) {
+                // Staff has custom hours
+                workingHours[staffMember.id] = staffHours
+                    .filter(h => !h.isOff)
+                    .map(h => ({ startTime: h.startTime, endTime: h.endTime }))
+            } else {
+                // Staff uses branch hours
+                workingHours[staffMember.id] = branchHours
+                    .filter(h => !h.isClosed)
+                    .map(h => ({ startTime: h.openTime, endTime: h.closeTime }))
+            }
+        }
+
+        return workingHours
+    } catch (error) {
+        console.error("getStaffWorkingHoursForCalendar error:", error)
+        return {}
+    }
+}
+
 // Helper function
 function parseTimeToMinutes(time: string): number {
     const [hours, minutes] = time.split(":").map(Number)

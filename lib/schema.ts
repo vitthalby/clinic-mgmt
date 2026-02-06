@@ -447,3 +447,44 @@ export const staffServiceCategories = pgTable(
         pk: primaryKey({ columns: [t.userId, t.branchId, t.category] }),
     })
 )
+
+// --- BRANCH HOLIDAYS ---
+// Holidays/closures for branches on specific dates
+export const branchHolidays = pgTable("branch_holidays", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    branchId: uuid("branch_id")
+        .notNull()
+        .references(() => branches.id, { onDelete: "cascade" }),
+    date: timestamp("date", { mode: "date" }).notNull(), // The holiday date
+    name: text("name").notNull(), // e.g., "Christmas", "Diwali", "Maintenance Day"
+    isFullDay: boolean("is_full_day").default(true), // If false, only specific hours are closed
+    startTime: text("start_time"), // For partial closures, e.g., "14:00" (null if full day)
+    endTime: text("end_time"), // For partial closures, e.g., "18:00" (null if full day)
+    notes: text("notes"), // Optional notes about the holiday
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+})
+
+// --- STAFF HOLIDAYS ---
+// Personal holidays/time-off for staff members on specific dates
+export const staffHolidays = pgTable("staff_holidays", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+        .notNull()
+        .references(() => users.id, { onDelete: "cascade" }),
+    branchId: uuid("branch_id")
+        .notNull()
+        .references(() => branches.id, { onDelete: "cascade" }),
+    date: timestamp("date", { mode: "date" }).notNull(), // The holiday date
+    name: text("name").notNull(), // e.g., "Personal Leave", "Vacation", "Sick Leave"
+    isFullDay: boolean("is_full_day").default(true), // If false, only specific hours are off
+    startTime: text("start_time"), // For partial time-off, e.g., "14:00" (null if full day)
+    endTime: text("end_time"), // For partial time-off, e.g., "18:00" (null if full day)
+    notes: text("notes"), // Optional notes
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+})
