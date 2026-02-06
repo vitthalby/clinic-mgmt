@@ -228,10 +228,19 @@ export default function UsersClient({
         setBranchCategoriesMap(categoriesMap)
     }
 
-    const openCreate = () => {
+    const openCreate = async () => {
         setEditingUser(null)
         resetForm()
-        initializeBranchRoleEntries()
+        await initializeBranchRoleEntries()
+
+        // For non-admin users with a branch in context, load services for the initially enabled branch
+        if (!isSuperUser && currentBranchId) {
+            await Promise.all([
+                loadBranchServices([currentBranchId]),
+                loadBranchOperatingHours([currentBranchId]),
+            ])
+        }
+
         setIsModalOpen(true)
     }
 
@@ -291,6 +300,14 @@ export default function UsersClient({
         } else if (!isAdmin) {
             // User has no existing data, initialize empty branch entries
             await initializeBranchRoleEntries(null)
+
+            // For non-admin users with a branch in context, load services for the initially enabled branch
+            if (!isSuperUser && currentBranchId) {
+                await Promise.all([
+                    loadBranchServices([currentBranchId]),
+                    loadBranchOperatingHours([currentBranchId]),
+                ])
+            }
         }
 
         setError(null)
